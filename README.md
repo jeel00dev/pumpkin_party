@@ -14,13 +14,14 @@ npm run simulate     # headless bots on every level: round lengths, falls, hits
 npm run build        # Basic Launch build (ads off) into dist/
 npm run build:full   # Full Launch build (ads on, through the SDK only)
 npm run check        # tests + build + CrazyGames limits
-npx playwright test  # compliance and playthrough suites, against dist/
+npx playwright test  # compliance and playthrough suites, against dist/ (port 4317, or set E2E_PORT)
 npm run art          # re-render logo, loading screen and level thumbnails (dev server must be running)
 npm run promo        # re-render CrazyGames covers and preview videos (dev server must be running)
 ```
 
 Useful URL flags in development: `?tier=low|medium|high`, `?bot=1` (autopilot), `?speed=3`.
 `/lab.html?view=all` shows every character; `/lab.html?view=level&level=ghostChase` opens a level.
+`/soundtest.html` plays every sound and music track. Open it from a phone as well, using the Network address `npm run dev` prints.
 
 ## Publishing on CrazyGames
 

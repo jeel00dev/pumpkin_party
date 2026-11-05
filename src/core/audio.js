@@ -5,6 +5,15 @@
 // next gesture, and honours CrazyGames' muteAudio setting over the in-game toggles.
 const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
+/** Every sound the game can make, grouped for the sound test page. A unit test keeps this complete. */
+export const SOUND_GROUPS = {
+  Movement: ['jump', 'land', 'dive', 'boing', 'shove', 'thud', 'splash', 'respawn'],
+  'Hazards and hits': ['bonk', 'crack', 'drop', 'curse', 'boo', 'whoosh'],
+  'Round moments': ['count', 'go', 'qualify', 'ping', 'star', 'win', 'lose'],
+  'Menus and rewards': ['click', 'hover', 'tab', 'coin', 'buy', 'equip', 'error', 'levelup'],
+};
+export const MUSIC_TRACKS = ['menu', 'race', 'final'];
+
 export class Audio {
   constructor() {
     this.ctx = null;

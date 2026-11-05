@@ -177,11 +177,11 @@ test('page never scrolls, text cannot be selected, context menu is suppressed', 
   expect(await page.evaluate(() => { const e = new MouseEvent('contextmenu', { cancelable: true, bubbles: true }); document.body.dispatchEvent(e); return e.defaultPrevented; })).toBe(true);
 });
 
-test('all asset requests use relative paths on the same origin', async ({ page }) => {
+test('all asset requests use relative paths on the same origin', async ({ page, baseURL }) => {
   const external = [];
   page.on('request', (r) => {
     const u = r.url();
-    if (!u.startsWith('http://127.0.0.1:4173') && !u.startsWith('data:') && !u.startsWith('blob:') && !u.includes('sdk.crazygames.com')) external.push(u);
+    if (!u.startsWith(baseURL) && !u.startsWith('data:') && !u.startsWith('blob:') && !u.includes('sdk.crazygames.com')) external.push(u);
   });
   await open(page, { save: returning });
   await page.waitForTimeout(500);

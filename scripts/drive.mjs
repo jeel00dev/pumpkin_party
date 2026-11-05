@@ -10,7 +10,9 @@ const pos = args.filter((a) => !a.startsWith('--'));
 const scenario = pos[0];
 const W = +(pos[1] || 1280), H = +(pos[2] || 720);
 const base = process.env.BASE || 'http://127.0.0.1:5173';
-const flags = igpu ? ['--use-angle=gl-egl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'] : ['--use-angle=vulkan', '--enable-features=Vulkan', '--ignore-gpu-blocklist'];
+// On Windows, Vulkan selects the discrete GPU and Direct3D 11 the integrated one.
+const igpuFlags = process.platform === 'win32' ? ['--use-angle=d3d11', '--ignore-gpu-blocklist'] : ['--use-angle=gl-egl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'];
+const flags = igpu ? igpuFlags : ['--use-angle=vulkan', '--enable-features=Vulkan', '--ignore-gpu-blocklist'];
 const b = await chromium.launch({ headless: true, channel: 'chromium', args: flags });
 const ctx = await b.newContext({ viewport: { width: W, height: H }, hasTouch: args.includes('--touch'), isMobile: args.includes('--touch') });
 const p = await ctx.newPage();
