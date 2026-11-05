@@ -1,64 +1,6 @@
 // CrazyGames compliance suite. Each test maps to a rule in docs/crazygames-compliance.md.
 import { expect, test } from '@playwright/test';
-
-/** A faithful stub of SDK v3, so lifecycle calls, ads, and Data storage can be asserted. */
-const sdkStub = (opts = {}) => `
-  window.__sdkLog = [];
-  const store = {};
-  const log = (n) => window.__sdkLog.push(n);
-  const adMode = ${JSON.stringify(opts.ad || 'finish')};
-  window.CrazyGames = { SDK: {
-    environment: ${JSON.stringify(opts.environment || 'crazygames')},
-    async init() { log('init'); },
-    data: {
-      getItem(k) { log('data.get'); return store[k] ?? null; },
-      setItem(k, v) { log('data.set'); store[k] = v; },
-      removeItem(k) { delete store[k]; }, clear() {},
-    },
-    game: {
-      settings: { muteAudio: ${opts.muted ? 'true' : 'false'}, disableChat: false },
-      gameplayStart() { log('gameplayStart'); }, gameplayStop() { log('gameplayStop'); },
-      loadingStart() { log('loadingStart'); }, loadingStop() { log('loadingStop'); },
-      happytime() { log('happytime'); }, reportGameCompletedPercentage(p) { log('completion:' + p); },
-      addSettingsChangeListener(l) { window.__sdkSettings = l; }, removeSettingsChangeListener() {},
-      isInstantMultiplayer: false,
-    },
-    user: {
-      isUserAccountAvailable: true,
-      systemInfo: { device: { type: 'desktop' }, locale: 'en-US', applicationType: 'web', countryCode: 'US', os: { name: 'Windows' }, browser: { name: 'Chrome' } },
-      async getUser() { return ${opts.user ? JSON.stringify(opts.user) : 'null'}; },
-      async showAuthPrompt() { log('authPrompt'); return { username: 'Prompted', profilePictureUrl: '', __dangerousUserId: '1' }; },
-      addAuthListener() {}, removeAuthListener() {},
-    },
-    ad: {
-      async hasAdblock() { return ${opts.adblock ? 'true' : 'false'}; },
-      requestAd(type, cb) {
-        log('ad:' + type);
-        setTimeout(() => {
-          if (adMode === 'error') { cb.adError({ code: 'unfilled', message: 'none' }); return; }
-          if (adMode === 'disabled') { cb.adError({ code: 'adsDisabled', message: 'basic' }); return; }
-          cb.adStarted?.(); log('adStarted');
-          setTimeout(() => { log('adFinished'); cb.adFinished?.(); }, 50);
-        }, 10);
-      },
-    },
-    banner: { async requestResponsiveBanner() { log('banner'); }, clearBanner() {}, clearAllBanners() { log('bannerClear'); } },
-  } };
-`;
-
-async function open(page, { url = '/', sdk = {}, block = false, save = null } = {}) {
-  await page.route('https://sdk.crazygames.com/**', (r) => (block ? r.abort() : r.fulfill({ contentType: 'application/javascript', body: sdkStub(sdk) })));
-  if (save) await page.addInitScript((s) => { localStorage.setItem('pumpkinparty.save', JSON.stringify(s)); }, save);
-  const errors = [];
-  page.on('pageerror', (e) => errors.push(String(e)));
-  await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction('window.__ready === true', { timeout: 90000 });
-  return errors;
-}
-
-const log = (page) => page.evaluate(() => window.__sdkLog);
-// A returning player who's already claimed today's reward, so nothing sits on top of the menu.
-const returning = { flags: { tutorial: true, firstMatch: true }, daily: { lastDay: Math.floor(Date.now() / 86400000), streak: 1 } };
+import { log, open, returning } from './helpers.js';
 
 test('new players land directly in gameplay, with no click needed', async ({ page }) => {
   const errors = await open(page);
@@ -89,7 +31,7 @@ test('the daily reward greets returning players once, and never new ones', async
 
 test('during a round the HUD lets the mouse through to the game', async ({ page }) => {
   await open(page, { save: returning });
-  await page.evaluate(() => window.__app.startSolo('pumpkinDash'));
+  await page.evaluate(() => window.__app.startPractice('pumpkinDash'));
   await expect.poll(() => page.evaluate(() => window.__app.match?.phase), { timeout: 20000 }).toBe('play');
   const hit = await page.evaluate(() => document.elementFromPoint(innerWidth / 2, innerHeight * 0.6)?.id);
   expect(hit).toBe('game');
@@ -103,7 +45,7 @@ test('SDK lifecycle fires in the right order', async ({ page }) => {
   expect(first).toContain('loadingStop');
   expect(first.indexOf('loadingStart')).toBeLessThan(first.indexOf('loadingStop'));
   expect(first).not.toContain('gameplayStart'); // not while sitting in a menu
-  await page.evaluate(() => window.__app.startSolo('pumpkinDash'));
+  await page.evaluate(() => window.__app.startPractice('pumpkinDash'));
   await expect.poll(async () => (await log(page)).includes('gameplayStart'), { timeout: 20000 }).toBe(true);
   // Pausing stops gameplay, resuming starts it again.
   await page.keyboard.press('KeyP');
@@ -112,10 +54,34 @@ test('SDK lifecycle fires in the right order', async ({ page }) => {
   await expect.poll(async () => (await log(page)).filter((x) => x === 'gameplayStart').length).toBe(2);
 });
 
+test('switching tabs pauses the round but never fires gameplayStop, which CrazyGames handles itself', async ({ page }) => {
+  await open(page, { save: returning });
+  await page.evaluate(() => window.__app.startPractice('pumpkinDash'));
+  await expect.poll(() => page.evaluate(() => window.__app.match?.phase), { timeout: 20000 }).toBe('play');
+  const setHidden = (hidden) => page.evaluate((h) => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => h });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (h ? 'hidden' : 'visible') });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, hidden);
+  await setHidden(true);
+  await expect.poll(() => page.evaluate(() => window.__app.paused)).toBe(true);
+  await setHidden(false);
+  await page.locator('[data-act=resume]').click();
+  const lg = await log(page);
+  expect(lg).not.toContain('gameplayStop');
+  expect(lg.filter((x) => x === 'gameplayStart').length).toBe(1);
+  // Leaving from a pause reached that way is a real break, so it must still report one.
+  await setHidden(true);
+  await expect.poll(() => page.evaluate(() => window.__app.paused)).toBe(true);
+  await setHidden(false);
+  await page.locator('[data-act=quit]').click();
+  await expect.poll(async () => (await log(page)).includes('gameplayStop')).toBe(true);
+});
+
 test('runs fully offline when the SDK cannot load (ad blockers, no network)', async ({ page }) => {
   const errors = await open(page, { block: true, save: returning });
   await expect.poll(() => page.evaluate(() => document.body.dataset.screen)).toBe('menu');
-  await page.evaluate(() => window.__app.startSolo('pumpkinDash'));
+  await page.evaluate(() => window.__app.startPractice('pumpkinDash'));
   await expect.poll(() => page.evaluate(() => window.__app.match?.phase), { timeout: 20000 }).toBe('play');
   expect(errors).toEqual([]);
 });
@@ -157,7 +123,7 @@ test('honours the platform mute setting over in-game volume', async ({ page }) =
 
 test('no fullscreen button, external links or quit button anywhere', async ({ page }) => {
   await open(page, { save: returning });
-  for (const scr of ['menu', 'levels', 'shop', 'customize', 'event']) {
+  for (const scr of ['menu', 'practice', 'shop', 'customize', 'event']) {
     await page.evaluate((s) => window.__app.goto(s), scr);
     await page.waitForTimeout(150);
     await expect(page.locator('a[href]')).toHaveCount(0);
@@ -177,11 +143,11 @@ test('page never scrolls, text cannot be selected, context menu is suppressed', 
   expect(await page.evaluate(() => { const e = new MouseEvent('contextmenu', { cancelable: true, bubbles: true }); document.body.dispatchEvent(e); return e.defaultPrevented; })).toBe(true);
 });
 
-test('all asset requests use relative paths on the same origin', async ({ page }) => {
+test('all asset requests use relative paths on the same origin', async ({ page, baseURL }) => {
   const external = [];
   page.on('request', (r) => {
     const u = r.url();
-    if (!u.startsWith('http://127.0.0.1:4173') && !u.startsWith('data:') && !u.startsWith('blob:') && !u.includes('sdk.crazygames.com')) external.push(u);
+    if (!u.startsWith(baseURL) && !u.startsWith('data:') && !u.startsWith('blob:') && !u.includes('sdk.crazygames.com')) external.push(u);
   });
   await open(page, { save: returning });
   await page.waitForTimeout(500);
@@ -190,7 +156,7 @@ test('all asset requests use relative paths on the same origin', async ({ page }
 
 test('keyboard controls work: W runs forward, Space jumps, Shift dives', async ({ page }) => {
   await open(page, { save: returning });
-  await page.evaluate(() => window.__app.startSolo('pumpkinDash'));
+  await page.evaluate(() => window.__app.startPractice('pumpkinDash'));
   await expect.poll(() => page.evaluate(() => window.__app.match?.phase), { timeout: 20000 }).toBe('play');
   const z0 = await page.evaluate(() => window.__app.activeView.sim.player.z);
   await page.keyboard.down('KeyW');
@@ -255,11 +221,12 @@ test('rewarded offers show a video icon and an equal decline button', async ({ p
   expect(a).toBe(b);
 });
 
-for (const [w, h, label] of [[821, 462, 'smallest desktop iframe'], [800, 450, 'mobile'], [1080, 607, 'tablet'], [1920, 1080, 'full HD']]) {
+// Every size CrazyGames lists at https://docs.crazygames.com/requirements/gameplay/
+for (const [w, h, label] of [[821, 462, 'smallest desktop iframe'], [907, 510, 'desktop iframe'], [1077, 606, 'desktop iframe'], [1216, 684, 'desktop iframe'], [1280, 720, 'fullscreen'], [1366, 768, 'fullscreen'], [1536, 864, 'fullscreen'], [1920, 1080, 'full HD'], [800, 450, 'mobile'], [1080, 607, 'tablet']]) {
   test(`layout fits inside the view at ${label} (${w}x${h})`, async ({ page }) => {
     await page.setViewportSize({ width: w, height: h });
     await open(page, { save: returning });
-    for (const scr of ['menu', 'levels', 'shop', 'customize', 'event']) {
+    for (const scr of ['menu', 'practice', 'shop', 'customize', 'event']) {
       await page.evaluate((s) => window.__app.goto(s), scr);
       await page.waitForTimeout(120);
       const over = await page.evaluate(() => {

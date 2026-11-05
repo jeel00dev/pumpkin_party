@@ -3,19 +3,22 @@
 import { World } from '../physics/world.js';
 import { Racer, S, resolveRacerContacts } from '../physics/racer.js';
 import { Bot, botName } from './bot.js';
+import { modsFor } from '../content/curses.js';
 
 export const STEP = 1 / 120;
 
 export class Simulation {
   /**
    * @param {function} buildLevel level factory
-   * @param {object} o  { tier, headless, seed, racers: [{name, skin, isPlayer, skill}], quota, difficulty }
+   * @param {object} o  { tier, headless, seed, racers: [{name, skin, isPlayer, skill}], quota, difficulty, curse }
    */
   constructor(buildLevel, o = {}) {
     this.seed = o.seed ?? 1;
     let s = (this.seed * 2654435761) >>> 0 || 1;
     this.rand = () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
     this.world = new World();
+    this.curse = o.curse ?? null;
+    this.world.mods = modsFor(this.curse);
     this.level = buildLevel({ world: this.world, tier: o.tier, headless: o.headless, seed: this.seed, difficulty: o.difficulty ?? 0.5, sim: this });
     this.racers = [];
     this.bots = [];
@@ -31,12 +34,13 @@ export class Simulation {
     this.respawnQueue = [];
     this.pacing = o.pacing ?? null;  // optional director: fn(sim) -> pace multiplier per bot
     this.level.sim = this;
+    this.level.applyMods(this.world.mods);
 
     const spawns = this.level.spawns;
     (o.racers || []).forEach((def, i) => {
       const r = new Racer(i, this.world, { isPlayer: def.isPlayer, name: def.name ?? botName(this.rand) });
       r.skin = def.skin; r.def = def;
-      const sp = spawns[i % spawns.length];
+      const sp = (def.isPlayer && this.level.playerSpawn) || spawns[i % spawns.length];
       r.teleport(sp.x, sp.y, sp.z, sp.yaw ?? Math.PI);
       r.spawnIndex = i;
       this.racers.push(r);
@@ -101,7 +105,7 @@ export class Simulation {
       if (r.y < killY && r.state !== S.DONE) {
         this.world.emit('fall', r, r.x, this.level.liquidY ?? killY, r.z);
         r.falls++;
-        if (this.level.mode === 'race') {
+        if (this.level.mode === 'race' || this.level.mode === 'free') {
           r.respawnT = 0.75;
           r.hidden = true;
           r.vx = r.vz = 0; r.vy = 0;
@@ -151,15 +155,18 @@ export class Simulation {
   }
 
   timeUp() {
+    if (this.level.mode === 'race') { this.settle(); return; }
+    for (const r of this.racers) if (r.active && !r.eliminated) this.qualify(r);
+    this.endRound();
+  }
+
+  /** Ends the round now: the racers furthest along take the spots left, as with a photo finish. */
+  settle() {
     const L = this.level;
-    if (L.mode === 'race') {
-      // Time ran out: the furthest racers take any remaining spots, as with a photo finish.
-      const pending = this.racers.filter((r) => !r.finished && !r.eliminated && r.active).sort((a, b) => L.progress(b) - L.progress(a));
-      const need = Math.max(0, this.quota - this.qualified.length);
-      pending.slice(0, need).forEach((r) => this.qualify(r));
-    } else {
-      for (const r of this.racers) if (r.active && !r.eliminated) this.qualify(r);
-    }
+    const pending = this.racers.filter((r) => !r.finished && !r.eliminated && r.active)
+      .sort((a, b) => L.progress(b) - L.progress(a) || (b.def?.skill ?? 0) - (a.def?.skill ?? 0));
+    const need = Math.max(0, this.quota - this.qualified.length);
+    pending.slice(0, need).forEach((r) => this.qualify(r));
     this.endRound();
   }
 

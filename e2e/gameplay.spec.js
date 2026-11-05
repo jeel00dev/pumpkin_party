@@ -12,18 +12,22 @@ test('a whole match plays through to the results without an error', async ({ pag
   await page.waitForFunction('window.__ready === true', { timeout: 90000 });
   await page.getByRole('button', { name: 'Play' }).first().click();
   const seen = new Set();
-  for (let i = 0; i < 400; i++) {
-    await page.waitForTimeout(500);
+  for (let i = 0; i < 800; i++) {
+    await page.waitForTimeout(250);
     const s = await page.evaluate(() => document.body.dataset.screen);
     seen.add(s);
-    if (s === 'roundComplete') await page.locator('[data-next]').click();
     if (s === 'results') break;
   }
-  expect(seen.has('results')).toBe(true);
+  for (const s of ['lobby', 'reveal', 'round', 'standings', 'results']) expect(seen.has(s), s).toBe(true);
   expect(await page.evaluate(() => window.__app.profile.d.stats.matches)).toBe(1);
-  // Play Again goes straight back into a round.
+  // Every player-facing word is the game's own.
+  const words = await page.locator('#ui').innerText();
+  expect(words).not.toMatch(/Qualified|Eliminated/);
+  // Play Again skips the lobby: one click to the board, then the next round.
   await page.locator('[data-act=again]').click();
-  await expect.poll(() => page.evaluate(() => document.body.dataset.screen)).toBe('round');
+  await expect.poll(() => page.evaluate(() => document.body.dataset.screen)).toBe('reveal');
+  await page.keyboard.press('Space');
+  await expect.poll(() => page.evaluate(() => document.body.dataset.screen), { timeout: 20000 }).toBe('round');
   expect(errors).toEqual([]);
 });
 
@@ -34,7 +38,7 @@ test('touch controls appear on touch devices and drive the character', async ({ 
   await page.addInitScript(() => localStorage.setItem('pumpkinparty.save', JSON.stringify({ flags: { tutorial: true, firstMatch: true }, daily: { lastDay: Math.floor(Date.now() / 86400000), streak: 1 } })));
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction('window.__ready === true', { timeout: 90000 });
-  await page.evaluate(() => window.__app.startSolo('pumpkinDash'));
+  await page.evaluate(() => window.__app.startPractice('pumpkinDash'));
   await expect.poll(() => page.evaluate(() => window.__app.match?.phase), { timeout: 20000 }).toBe('play');
   await expect(page.locator('[data-stick]')).toBeVisible();
   await expect(page.locator('[data-jump]')).toBeVisible();
@@ -60,7 +64,7 @@ test('audio unlocks on the first gesture, and every sound and track plays withou
   await expect.poll(() => page.evaluate(() => window.__app.audio.ctx?.state)).toBe('running');
   await page.evaluate(async () => {
     const a = window.__app.audio;
-    for (const n of ['jump', 'land', 'dive', 'bonk', 'boing', 'splash', 'respawn', 'qualify', 'ping', 'thud', 'click', 'hover', 'tab', 'count', 'go', 'coin', 'buy', 'error', 'equip', 'lose', 'win', 'levelup', 'crack', 'drop', 'curse', 'boo', 'whoosh', 'star', 'shove']) {
+    for (const n of ['jump', 'land', 'dive', 'bonk', 'boing', 'splash', 'respawn', 'qualify', 'ping', 'thud', 'click', 'hover', 'tab', 'count', 'go', 'coin', 'buy', 'error', 'equip', 'lose', 'win', 'levelup', 'crack', 'drop', 'curse', 'boo', 'whoosh', 'star', 'shove', 'planchette', 'reveal']) {
       a.lastPlayed.clear();
       a.sfx(n);
     }

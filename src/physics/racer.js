@@ -72,6 +72,11 @@ export class Racer {
     this.stunStrength = 0;
     this.sinceHit = 99;
     this.falls = 0; this.hits = 0;
+    const m = world.mods;
+    this.gravity = MOVE.GRAVITY * m.gravity;
+    this.grip = m.grip;
+    this.radius = MOVE.RADIUS * m.body;
+    this.height = MOVE.HEIGHT * m.body;
   }
 
   teleport(x, y, z, yaw = this.yaw) {
@@ -136,7 +141,7 @@ export class Racer {
     let rx = this.vx - baseX, rz = this.vz - baseZ;
     const maxSp = MOVE.RUN_SPEED * this.speedMod;
     const tx = mx * maxSp, tz = mz * maxSp;
-    const frictionMul = this.grounded && this.ground ? this.ground.friction : 1;
+    const frictionMul = this.grounded && this.ground ? this.ground.friction * this.grip : 1;
     let accel;
     if (this.grounded) accel = (wish > 0.05 ? MOVE.GROUND_ACCEL : MOVE.GROUND_DECEL) * frictionMul;
     else accel = MOVE.AIR_ACCEL;
@@ -183,7 +188,7 @@ export class Racer {
     if (inp.divePressed && this.diveCd <= 0) this.startDive();
 
     // Gravity with short-hop and fall tuning.
-    let g = MOVE.GRAVITY;
+    let g = this.gravity;
     if (this.vy < 0) { g *= MOVE.FALL_MULT; this.jumping = false; }
     else if (this.jumping && !inp.jump) g *= MOVE.LOW_JUMP_MULT;
     this.vy -= g * dt;
@@ -208,7 +213,7 @@ export class Racer {
   }
 
   stepDive(dt) {
-    this.vy -= MOVE.GRAVITY * dt;
+    this.vy -= this.gravity * dt;
     if (this.vy < MOVE.TERMINAL) this.vy = MOVE.TERMINAL;
     if (this.grounded) {
       this.state = S.SLIDE;
@@ -225,13 +230,13 @@ export class Racer {
       const ns = Math.max(0, sp - MOVE.SLIDE_FRICTION * dt);
       this.vx = this.gvx + (rx / sp) * ns; this.vz = this.gvz + (rz / sp) * ns;
     }
-    this.vy -= MOVE.GRAVITY * dt;
+    this.vy -= this.gravity * dt;
     if (this.timer <= 0) { this.state = S.GETUP; this.timer = MOVE.GETUP_TIME * 0.5; }
   }
 
   stepStun(dt) {
     this.timer -= dt;
-    this.vy -= MOVE.GRAVITY * dt;
+    this.vy -= this.gravity * dt;
     if (this.vy < MOVE.TERMINAL) this.vy = MOVE.TERMINAL;
     if (this.grounded) {
       const f = Math.max(0, 1 - 4.5 * dt);
@@ -272,7 +277,7 @@ export class Racer {
     this.timer -= dt;
     const f = Math.max(0, 1 - 14 * dt);
     this.vx = this.gvx + (this.vx - this.gvx) * f; this.vz = this.gvz + (this.vz - this.gvz) * f;
-    this.vy -= MOVE.GRAVITY * dt;
+    this.vy -= this.gravity * dt;
     if (this.timer <= 0) { this.state = S.RUN; this.coyote = 0; this.tq[0] = this.tq[1] = this.tq[2] = 0; this.tq[3] = 1; }
   }
 
@@ -288,14 +293,14 @@ export class Racer {
   }
 
   stepDone(dt) {
-    this.vy -= MOVE.GRAVITY * dt;
+    this.vy -= this.gravity * dt;
     const f = Math.max(0, 1 - 6 * dt);
     this.vx *= f; this.vz *= f;
   }
 
   integrate(dt) {
     const world = this.world;
-    const r = MOVE.RADIUS, H = MOVE.HEIGHT;
+    const r = this.radius, H = this.height;
     this.wasGrounded = this.grounded;
     const fallSpeed = -this.vy;
     this.x += (this.vx + this.pushX) * dt; this.y += this.vy * dt; this.z += (this.vz + this.pushZ) * dt;
@@ -454,7 +459,7 @@ const _ground = { y: 0, collider: null };
 
 /** Soft body contact between characters, plus the fun part: a dive that connects knocks people over. */
 export function resolveRacerContacts(racers, dt) {
-  const R = 0.56, RR = R * 2;
+  const R = racers.length ? 0.56 * (racers[0].radius / MOVE.RADIUS) : 0.56, RR = R * 2;
   for (let i = 0; i < racers.length; i++) {
     const a = racers[i];
     if (!a.active || a.state === S.GONE || a.state === S.DONE) continue;

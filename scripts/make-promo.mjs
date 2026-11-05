@@ -78,7 +78,7 @@ async function video(name, w, h, coverFile) {
       a.ui.clear();
       a.match?.disposeView();
       a.hud.unmount();
-      a.startSolo(level);
+      a.startPractice(level);
       if (a.match.view?.intro) a.match.view.skipIntro();
     }, id);
     // Run the countdown and the lead-in unrecorded, so the clip starts mid-action.

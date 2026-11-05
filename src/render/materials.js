@@ -199,7 +199,7 @@ export function refractive({ color = 0x7dff3a, deep = 0x1a7a12, emissive = 0x000
  */
 export function glass({ color = 0xffb0ec, strength = 0.07, tint = 0.65, edge = 0xffffff, envColor = 0xd8c0ff } = {}) {
   return new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, side: THREE.FrontSide,
+    transparent: true, depthWrite: false, side: THREE.FrontSide, userData: { glass: true },
     uniforms: {
       tRefract: SHARED.tRefract, uScreen: SHARED.uScreen, uRefractOn: SHARED.uRefractOn,
       uColor: { value: new THREE.Color(color) }, uEdge: { value: new THREE.Color(edge) }, uEnv: { value: new THREE.Color(envColor) },

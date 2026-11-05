@@ -6,6 +6,8 @@
 // and the same step can later run on a server for multiplayer.
 
 export const BOX = 0, CYL = 1, SPHERE = 2, CAPSULE = 3;
+/** Round-wide modifiers a racer reads. A curse replaces these: see src/content/curses.js. */
+const DEFAULT_MODS = Object.freeze({ gravity: 1, grip: 1, body: 1, botSight: 1 });
 
 export class Collider {
   constructor(type, opts = {}) {
@@ -219,6 +221,7 @@ export class World {
     this.gridDirty = true;
     this.events = [];
     this.time = 0;
+    this.mods = DEFAULT_MODS;
   }
 
   add(c) {

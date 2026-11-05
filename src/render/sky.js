@@ -50,6 +50,17 @@ export const THEMES = {
     hemi: { sky: 0xa390ff, ground: 0x5a8c3a, intensity: 0.85 },
     cloud: 0xc8b0ff, cloudLow: 0x7a58d8, envBoost: 1.0, stars: 1.0,
   },
+  // Lantern Fog curse: the moon's gone and the world ends a few strides out.
+  fog: {
+    top: 0x0a0826, mid: 0x14103c, hor: 0x241c58, low: 0x0e0a30,
+    fog: 0x1e1852, fogDensity: 0.05,
+    moon: { dir: [-0.2, 0.3, -0.93], size: 30, color: 0x8a86c8, glow: 0x3a3488, intensity: 0.35 },
+    key: { color: 0x9a96e0, intensity: 0.9, dir: [0.42, 0.9, 0.42] },
+    fill: { color: 0x6a60c0, intensity: 0.3, dir: [-0.7, 0.4, 0.6] },
+    rim: { color: 0x8a6ad0, intensity: 0.3, dir: [0.1, 0.2, -1] },
+    hemi: { sky: 0x5a54a8, ground: 0x2a1c60, intensity: 0.7 },
+    cloud: 0x2a2468, cloudLow: 0x1a1648, envBoost: 0.4, stars: 0.1,
+  },
   // Hot purple & magenta for the cauldron final.
   final: {
     top: 0x24107a, mid: 0x6a22c8, hor: 0xe058d8, low: 0x4a1498,

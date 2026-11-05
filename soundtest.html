@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Pumpkin Party sound test</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; padding: 16px; background: #21116a; color: #fff; font: 600 16px/1.35 system-ui, sans-serif; }
+    h1 { font-size: 24px; margin: 0 0 4px; }
+    h2 { font-size: 17px; margin: 22px 0 8px; color: #ffe25a; }
+    p { margin: 6px 0; max-width: 46rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+    .sound { display: flex; align-items: center; gap: 4px; background: #371c9e; border-radius: 10px; padding: 6px; }
+    button { font: inherit; color: inherit; border: 0; border-radius: 8px; background: #5a31da; padding: 8px 10px; cursor: pointer; }
+    button:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+    .sound .play { flex: 1; text-align: left; }
+    .sound .mark { min-width: 40px; padding: 8px 4px; background: #2a1680; }
+    .sound .mark.on.good { background: #128a58; }
+    .sound .mark.on.bad { background: #b81e46; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    label { display: inline-flex; gap: 8px; align-items: center; }
+    textarea { display: block; width: 100%; max-width: 46rem; height: 8rem; box-sizing: border-box; margin-top: 8px; font: 14px/1.4 monospace; color: #fff; background: #190c4e; border: 1px solid #6035e4; border-radius: 8px; padding: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Sound test</h1>
+  <p>Developer page, not part of the game. Every sound here is generated in code and nobody has listened to it yet. Play each one on real speakers and on a phone, then mark it Good or Bad.</p>
+  <div id="root"></div>
+  <script type="module" src="/src/soundtest.js"></script>
+</body>
+</html>

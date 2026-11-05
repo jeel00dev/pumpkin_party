@@ -9,7 +9,7 @@ import { glowTexture, stitchTextures, tileTextures } from '../render/textures.js
 import { makeBoulder, makeBouncePad, makeHammer, makePatrolGhost, makeSpinBar, makeSpinDisc, addHammerFrame } from '../assets/obstacles.js';
 import { Scenery, makeBalloon, makeFloatGhost } from '../assets/scenery.js';
 
-export const ROUND_MODES = { RACE: 'race', SURVIVE: 'survive', LAST: 'last' };
+export const ROUND_MODES = { RACE: 'race', SURVIVE: 'survive', LAST: 'last', FREE: 'free' };
 
 export class Level {
   constructor(ctx) {
@@ -27,6 +27,7 @@ export class Level {
     this.mode = ROUND_MODES.RACE;
     this.reflectY = 0;
     this.theme = 'violet';
+    this.mods = this.world.mods;
     this.timeLimit = 150;
     this.finish = null;
     this.title = 'Level';
@@ -41,6 +42,12 @@ export class Level {
     }
   }
 
+  /** The sky and lighting this round uses, which a fog curse overrides. */
+  get themeName() { return this.mods.fog ? 'fog' : this.theme; }
+
+  /** Called once every obstacle exists, with the round's curse. */
+  applyMods(mods) { for (const o of this.obstacles) o.speedUp?.(mods.hazardSpeed ?? 1); }
+
   /** Runs art code only when there's a renderer. */
   art(fn) { if (!this.headless) fn(this.s, this.group); }
 
@@ -51,12 +58,12 @@ export class Level {
   // Tile floors
   // -----------------------------------------------------------------------------------------
   /** Adds a flat tiled floor with its top at y. */
-  floor({ x = 0, y = 0, z, w, d, tile = 3.6, kind = 'crown', palette = null, collide = true, base = true, thickness = 1.6, ry = 0, friction = 1, noClimb = false }) {
+  floor({ x = 0, y = 0, z, w, d, tile = 3.6, kind = 'candy', palette = null, collide = true, base = true, thickness = 1.6, ry = 0, friction = 1, noClimb = false }) {
     if (collide) this.addCol(makeBox(x, y - thickness / 2, z, w, thickness, d, { ry, friction, noClimb }));
     this.art(() => {
       const nx = Math.max(1, Math.round(w / tile)), nz = Math.max(1, Math.round(d / tile));
       const tw = w / nx, td = d / nz;
-      const pal = palette || FLOOR_PALETTES[kind] || FLOOR_PALETTES.crown;
+      const pal = palette || FLOOR_PALETTES[kind] || FLOOR_PALETTES.candy;
       const matOuter = T(x, y, z, 0, ry);
       for (let i = 0; i < nx; i++) {
         for (let j = 0; j < nz; j++) {
@@ -71,7 +78,7 @@ export class Level {
   }
 
   /** Sloped tiled ramp between two heights along Z. */
-  ramp({ x = 0, y0, z0, y1, z1, w, tile = 3.6, kind = 'crown', palette = null, conveyor = 0, friction = 1 }) {
+  ramp({ x = 0, y0, z0, y1, z1, w, tile = 3.6, kind = 'candy', palette = null, conveyor = 0, friction = 1 }) {
     const dz = z1 - z0, dy = y1 - y0, len = Math.hypot(dz, dy);
     const pitch = Math.atan2(dy, Math.abs(dz)) * (dz < 0 ? 1 : -1);
     const cx = x, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
@@ -84,7 +91,7 @@ export class Level {
       const m0 = T(cx, cy, cz, pitch, 0, 0);
       const nx = Math.max(1, Math.round(w / tile)), nz = Math.max(1, Math.round(len / tile));
       const tw = w / nx, td = len / nz;
-      const pal = palette || FLOOR_PALETTES[kind] || FLOOR_PALETTES.crown;
+      const pal = palette || FLOOR_PALETTES[kind] || FLOOR_PALETTES.candy;
       for (let i = 0; i < nx; i++) {
         for (let j = 0; j < nz; j++) {
           const m = m0.clone().multiply(T((i - (nx - 1) / 2) * tw, -0.3, (j - (nz - 1) / 2) * td));
@@ -122,16 +129,16 @@ export class Level {
     this.art((s, group) => {
       const detail = this.tier.detail;
       const texSize = detail === 0 ? 512 : 1024;
-      const crown = tileTextures(texSize);
+      const candy = tileTextures(texSize);
       const stitch = stitchTextures(detail === 0 ? 256 : 512);
       const mats = {
-        crown: this.tier.detail === 0 ? new THREE.MeshStandardMaterial({ map: crown.albedo, normalMap: crown.normal, roughness: 0.3, envMapIntensity: 1 }) : reflectiveFloor({ map: crown.albedo, normalMap: crown.normal, rough: 0.3, normalScale: 0.7, reflect: 0.62 }),
+        candy: this.tier.detail === 0 ? new THREE.MeshStandardMaterial({ map: candy.albedo, normalMap: candy.normal, roughness: 0.3, envMapIntensity: 1 }) : reflectiveFloor({ map: candy.albedo, normalMap: candy.normal, rough: 0.3, normalScale: 0.7, reflect: 0.62 }),
         stitch: this.tier.detail === 0 ? new THREE.MeshStandardMaterial({ map: stitch.albedo, normalMap: stitch.normal, roughness: 0.4 }) : reflectiveFloor({ map: stitch.albedo, normalMap: stitch.normal, rough: 0.3, normalScale: 0.9, reflect: 0.8 }),
       };
       for (const b of this.tileBatches.values()) {
         const r = 0.2;
         const geo = box(b.w - 0.07, 0.6, b.d - 0.07, r, 2);
-        const mesh = new THREE.InstancedMesh(geo, mats[b.kind] || mats.crown, b.items.length);
+        const mesh = new THREE.InstancedMesh(geo, mats[b.kind] || mats.candy, b.items.length);
         const c = new THREE.Color();
         b.items.forEach((it, i) => {
           mesh.setMatrixAt(i, it.m);
@@ -160,11 +167,12 @@ export class Level {
         mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(conf.flat), fog: true });
       } else {
         mat = refractive(conf);
-        mat.uniforms.fogColor.value.set(THEMES[this.theme].fog);
-        mat.uniforms.fogDensity.value = THEMES[this.theme].fogDensity;
-        const k = THEMES[this.theme].key.dir;
+        const theme = THEMES[this.themeName];
+        mat.uniforms.fogColor.value.set(theme.fog);
+        mat.uniforms.fogDensity.value = theme.fogDensity;
+        const k = theme.key.dir;
         mat.uniforms.uLightDir.value.set(k[0], k[1], k[2]).normalize();
-        mat.uniforms.uSkyColor.value.set(THEMES[this.theme].mid);
+        mat.uniforms.uSkyColor.value.set(theme.mid);
       }
       this.liquid = new THREE.Mesh(geo, mat);
       this.liquid.position.set(0, y, 0);
@@ -184,6 +192,7 @@ export class Level {
   bouncePad(o) { return this.addObstacle(new BouncePad(this, o)); }
   boulderSpawner(o) { return this.addObstacle(new BoulderSpawner(this, o)); }
   mover(o) { return this.addObstacle(new MovingPlatform(this, o)); }
+  bumpProp(o) { return this.addObstacle(new BumpProp(this, o)); }
 
   // -----------------------------------------------------------------------------------------
   // Runtime
@@ -332,7 +341,7 @@ export class Level {
 }
 
 export const FLOOR_PALETTES = {
-  crown: [0xb04ef2, 0xb854f6, 0xa848ec, 0xbe5af8, 0xb250f0],
+  candy: [0xb04ef2, 0xb854f6, 0xa848ec, 0xbe5af8, 0xb250f0],
   blue: [0x6a78ff, 0x6a90ff, 0x7a78ff, 0x5f83f2],
   stitch: [0x8a44f0, 0x9a50f8, 0x823ee8, 0x924af4],
   magenta: [0xc24cf0, 0xcc58f6, 0xb644e4],
@@ -372,6 +381,7 @@ class Hammer {
     });
     this.step(0, 1 / 120);
   }
+  speedUp(k) { this.speed *= k; }
   angle(t) { return this.amp * Math.sin(this.speed * t + this.phase); }
   step(t) {
     const a = this.angle(t);
@@ -545,6 +555,56 @@ class BouncePad {
     this.pulse = Math.max(0, this.pulse - dt * 4);
     const k = Math.sin(t * 3) * 0.015;
     this.mesh.scale.set(1 + k, 1 - k + this.pulse * 0.2, 1 + k);
+  }
+}
+
+/** A loose pumpkin that racers can knock around. Harmless, and it only rolls on flat ground. */
+class BumpProp {
+  constructor(level, { x, z, y = 0, R = 1, boundX = 14, boundZ = 14 }) {
+    Object.assign(this, { level, x, z, y, R, boundX, boundZ });
+    this.hidesNearCamera = true;
+    this.vx = 0; this.vz = 0;
+    this.q = new THREE.Quaternion();
+    this._v = new THREE.Vector3();
+    this._dq = new THREE.Quaternion();
+    level.art((_, group) => {
+      this.mesh = makeBoulder(R);
+      this.mesh.position.set(x, y + R, z);
+      group.add(this.mesh);
+    });
+  }
+  step(t, dt) {
+    const sim = this.level.sim;
+    if (!sim) return;
+    const reach = this.R + 0.5;
+    for (const r of sim.racers) {
+      if (!r.active || r.hidden || r.y > this.y + this.R * 2) continue;
+      const dx = this.x - r.x, dz = this.z - r.z, d = Math.hypot(dx, dz);
+      if (d >= reach || d < 1e-4) continue;
+      const nx = dx / d, nz = dz / d;
+      this.x += nx * (reach - d); this.z += nz * (reach - d);
+      const closing = (r.vx - this.vx) * nx + (r.vz - this.vz) * nz;
+      if (closing > 0.3) {
+        this.vx += nx * closing * 1.3; this.vz += nz * closing * 1.3;
+        if (closing > 3) this.level.world.emit('bump', r, this.x, this.y + 1, this.z, closing);
+      }
+    }
+    this.x += this.vx * dt; this.z += this.vz * dt;
+    const f = Math.max(0, 1 - 1.3 * dt);
+    this.vx *= f; this.vz *= f;
+    if (Math.abs(this.x) > this.boundX) { this.x = Math.sign(this.x) * this.boundX; this.vx *= -0.7; }
+    if (Math.abs(this.z) > this.boundZ) { this.z = Math.sign(this.z) * this.boundZ; this.vz *= -0.7; }
+  }
+  sync(t, dt) {
+    if (!this.mesh) return;
+    this.mesh.position.set(this.x, this.y + this.R, this.z);
+    const sp = Math.hypot(this.vx, this.vz);
+    if (sp > 0.01) {
+      this._v.set(this.vz / sp, 0, -this.vx / sp);
+      this._dq.setFromAxisAngle(this._v, (sp * dt) / this.R);
+      this.q.premultiply(this._dq);
+      this.mesh.quaternion.copy(this.q);
+    }
   }
 }
 

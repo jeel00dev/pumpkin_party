@@ -217,7 +217,7 @@ export function build(ctx) {
       }
     }
   });
-  L.spawns = spawnRing(16, 15);
+  L.spawns = spawnRing(24, 15);
   L.setupBot = (b) => { b.custom = brain(L.field); };
   L.bloom = 0.32;
 

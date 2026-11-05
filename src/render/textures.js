@@ -91,21 +91,20 @@ function fieldFromCanvas(c) {
   return f;
 }
 
-/** Crown icon, drawn around the origin with width ~2 units. */
-export function crownPath(ctx) {
+/** Wrapped sweet, drawn around the origin with width ~2 units. */
+function candyPath(ctx) {
   ctx.beginPath();
-  ctx.moveTo(-1, 0.62);
-  ctx.lineTo(-1.08, -0.38);
-  ctx.quadraticCurveTo(-0.72, -0.05, -0.52, 0.02);
-  ctx.lineTo(0, -0.72);
-  ctx.lineTo(0.52, 0.02);
-  ctx.quadraticCurveTo(0.72, -0.05, 1.08, -0.38);
-  ctx.lineTo(1, 0.62);
-  ctx.closePath();
+  ctx.ellipse(0, 0, 0.56, 0.44, 0, 0, Math.PI * 2);
+  for (const sd of [1, -1]) {
+    ctx.moveTo(sd * 0.46, 0);
+    ctx.lineTo(sd * 1.06, -0.46);
+    ctx.quadraticCurveTo(sd * 0.92, 0, sd * 1.06, 0.46);
+    ctx.closePath();
+  }
 }
 
 /**
- * Big glossy floor tile: mottled violet, with soft embossed crowns as in the key art.
+ * Big glossy floor tile: mottled violet, with soft embossed sweets.
  * Tiles use UV 0..1 across the top face, so one texture covers a whole tile.
  */
 export function tileTextures(size = 1024) {
@@ -113,7 +112,7 @@ export function tileTextures(size = 1024) {
     const a = makeCanvas(size), h = makeCanvas(size);
     const ca = a.getContext('2d'), ch = h.getContext('2d');
     const R = rng(77);
-    // The base is darker than the crowns; instance colours supply the violet hue.
+    // The base is darker than the sweets; instance colours supply the violet hue.
     ca.fillStyle = '#b4adff'; ca.fillRect(0, 0, size, size);
     ch.fillStyle = '#000'; ch.fillRect(0, 0, size, size);
     for (let i = 0; i < 22; i++) {
@@ -124,19 +123,19 @@ export function tileTextures(size = 1024) {
       g.addColorStop(1, dark ? 'rgba(120,100,235,0)' : 'rgba(214,206,255,0)');
       ca.fillStyle = g; ca.fillRect(0, 0, size, size);
     }
-    const crown = (x, y, s, rot) => {
+    const sweet = (x, y, s, rot) => {
       for (const [c, fill] of [[ca, 'rgba(255,240,255,0.92)'], [ch, '#fff']]) {
         c.save(); c.translate(x, y); c.rotate(rot); c.scale(s, s);
-        crownPath(c);
+        candyPath(c);
         c.fillStyle = fill; c.fill();
         c.restore();
       }
     };
     const S = size;
-    crown(S * 0.3, S * 0.34, S * 0.115, -0.1);
-    crown(S * 0.74, S * 0.22, S * 0.07, 0.12);
-    crown(S * 0.72, S * 0.72, S * 0.105, -0.05);
-    crown(S * 0.24, S * 0.8, S * 0.065, 0.14);
+    sweet(S * 0.3, S * 0.34, S * 0.115, -0.3);
+    sweet(S * 0.74, S * 0.22, S * 0.07, 0.4);
+    sweet(S * 0.72, S * 0.72, S * 0.105, -0.2);
+    sweet(S * 0.24, S * 0.8, S * 0.065, 0.5);
     const f = fieldFromCanvas(h);
     blurField(f, size, size, Math.max(1, size >> 9), 2);
     return { albedo: toTexture(a), normal: normalFromField(f, size, size, 2.6 * (size / 1024), { repeat: false }) };

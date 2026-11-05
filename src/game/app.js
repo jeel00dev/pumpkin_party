@@ -10,6 +10,7 @@ import { HUD } from '../ui/hud.js';
 import { UI } from '../ui/screens.js';
 import { Thumbs } from '../ui/thumbs.js';
 import { Match } from './match.js';
+import { LOBBY_SIZE } from './playlist.js';
 import { MenuScene } from './menuscene.js';
 import { setAnisotropy } from '../render/textures.js';
 import { ICON } from '../ui/icons.js';
@@ -55,7 +56,7 @@ export class App {
     this.lastFrame = 0;
     this.paused = false;
     this.session = {
-      start: performance.now(), reviveUsed: false, played: 0,
+      start: performance.now(), played: 0,
       playedSeconds() { return this.played; },
     };
     this.perf = { acc: 0, n: 0, slow: 0, fast: 0, avg: 16 };
@@ -83,6 +84,7 @@ export class App {
     this.autoplay = params.has('bot');
     this.captureMode = params.has('capture');
     this.timeScale = +(params.get('speed') || 1);
+    this.lobbySize = +(params.get('lobby') || LOBBY_SIZE);
     const tier = params.get('tier') || (q === 'auto' ? detectTier(this.pipe.renderer) : q);
     this.pipe.setTier(tier);
     this.pipe.setSize(this.width, this.height);
@@ -108,10 +110,9 @@ export class App {
     await tick();
 
     this.input.onPause = () => this.pauseRound();
-    this.input.onUnlock = () => { if (this.match?.phase === 'play' && !this.ui.modal && !this.input.lockFailed) this.pauseRound(); };
+    this.input.onUnlock = () => { if (this.match?.phase === 'play' && !this.ui.modal && !this.input.lockFailed) this.pauseRound({ focusLost: document.hidden || !document.hasFocus() }); };
     this.input.onEmote = (i) => {
-      const owned = this.profile.d.owned.emote;
-      const name = [this.profile.d.equip.emote, 'cheer', 'dance', 'flex'].filter((e) => owned.includes(e))[i];
+      const name = this.emoteList()[i];
       if (name && this.activeView) { this.activeView.emote = name; clearTimeout(this._emoT); this._emoT = setTimeout(() => { if (this.activeView) this.activeView.emote = null; }, 2600); }
     };
     window.addEventListener('resize', () => this.onResize());
@@ -120,7 +121,7 @@ export class App {
       this.menu.playEmote(this.profile.d.equip.emote, 2.2);
       this.audio.sfx('boing', 0.5);
     });
-    document.addEventListener('visibilitychange', () => { if (document.hidden && this.match?.phase === 'play' && !this.paused) this.pauseRound(); });
+    document.addEventListener('visibilitychange', () => { if (document.hidden && this.match?.phase === 'play' && !this.paused) this.pauseRound({ focusLost: true }); });
     this.canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.contextLost = true; });
     this.canvas.addEventListener('webglcontextrestored', () => location.reload());
     if (sdk.isApp) document.documentElement.classList.add('in-app');
@@ -131,11 +132,17 @@ export class App {
     // New players go straight into gameplay, as CrazyGames requires; returning players get the menu.
     if (!this.profile.d.flags.firstMatch && !params.has('menu')) {
       this.showMenuBackdropOnly('title');
-      this.startMatch({ skipLobby: true, quick: true });
+      this.startMatch({ quick: true });
     } else {
       this.showMenu();
     }
     window.__ready = true;
+  }
+
+  /** The emotes on the number keys, with the equipped one first. */
+  emoteList() {
+    const owned = this.profile.d.owned.emote;
+    return [...new Set([this.profile.d.equip.emote, 'cheer', 'dance', 'flex'])].filter((e) => owned.includes(e));
   }
 
   // ---------------------------------------------------------------- routing
@@ -146,7 +153,7 @@ export class App {
     this.setActiveView(null);
     switch (name) {
       case 'menu': this.menu.setMode('menu'); this.ui.menu(); this.audio.music('menu'); break;
-      case 'levels': this.menu.setMode('menu'); this.ui.levels(arg); break;
+      case 'practice': this.menu.setMode('menu'); this.ui.practice(); break;
       case 'shop': this.menu.setMode('menu'); this.ui.shop(arg); break;
       case 'customize': this.menu.setMode('studio'); this.ui.customize(arg); break;
       case 'event': this.menu.setMode('menu'); this.ui.event(); break;
@@ -162,63 +169,33 @@ export class App {
   setActiveView(v) { this.activeView = v; }
 
   // ---------------------------------------------------------------- matches
+  /** @param {object} o quick: first launch, straight into a round. skipLobby: Play Again. */
   startMatch(o = {}) {
     this.ui.clear();
     this.paused = false;
     this.applyPendingTier();
-    if (o.skipLobby) {
-      this.match = new Match(this, { quick: o.quick });
-      this.match.begin();
-      return;
-    }
-    // A brief lobby: long enough to enjoy, short enough never to feel like a queue.
-    this.menu.setMode('match');
-    this.audio.music('menu');
-    this.menu.setCrowd(0);
-    let found = 1, cancelled = false;
-    const mm = this.ui.matchmaking(() => {
-      cancelled = true;
-      clearInterval(timer);
-      this.menu.setCrowd(0);
-      this.showMenu();
-    });
-    const timer = setInterval(() => {
-      const add = 1 + Math.floor(Math.random() * 3);
-      found = Math.min(16, found + add);
-      mm.set(found);
-      this.menu.setCrowd(found - 1);
-      this.audio.sfx('ping', 0.3, 0.8 + found * 0.03);
-      if (found >= 16) {
-        clearInterval(timer);
-        setTimeout(() => {
-          if (cancelled) return;
-          this.ui.clear();
-          this.menu.setCrowd(0);
-          this.match = new Match(this);
-          this.match.begin();
-        }, 380);
-      }
-    }, 260);
-  }
-
-  startSolo(id) {
-    this.ui.clear();
-    this.paused = false;
-    this.applyPendingTier();
-    this.match = new Match(this, { solo: id });
+    this.match = new Match(this, o);
     this.match.begin();
   }
 
-  pauseRound() {
+  startPractice(id) {
+    this.ui.clear();
+    this.paused = false;
+    this.applyPendingTier();
+    this.match = new Match(this, { practice: id });
+    this.match.begin();
+  }
+
+  /** @param {object} o focusLost: the player switched away. CrazyGames tracks that itself, so the SDK isn't told. */
+  pauseRound(o = {}) {
     if (this.paused) { if (this.ui.modal) this.resumeRound?.(); return; }
-    if (!this.match || this.match.phase === 'none' || this.ui.modal || !this.activeView) return;
-    if (this.match.phase === 'post') return;
+    if (!this.match || !['intro', 'count', 'play'].includes(this.match.phase) || this.ui.modal || !this.activeView) return;
     this.paused = true;
     this.input.paused = true;
     this.activeView.paused = true;
     this.input.setEnabled(false);
     this.audio.duck(true);
-    this.sdk.gameplayStop();
+    if (!o.focusLost) this.sdk.gameplayStop();
     const resume = () => {
       this.ui.closeModal();
       this.paused = false;
@@ -231,20 +208,22 @@ export class App {
     this.resumeRound = resume;
     this.ui.pause({
       onResume: resume,
-      canRestart: !!this.match.solo,
+      canRestart: !!this.match.practice,
       onRestart: () => {
-        const id = this.match.solo;
+        const id = this.match.practice;
         this.ui.closeModal();
         this.audio.duck(false);
         this.paused = false;
         this.input.paused = false;
+        this.sdk.gameplayStop();
         this.match.disposeView();
         this.hud.unmount();
-        this.startSolo(id);
+        this.startPractice(id);
       },
       onQuit: () => {
         this.ui.closeModal();
         this.audio.duck(false);
+        this.sdk.gameplayStop();
         this.paused = false;
         this.input.paused = false;
         this.match.disposeView();
@@ -364,10 +343,8 @@ export class App {
   stepFrame(dt) {
     return new Promise((resolve) => requestAnimationFrame(() => {
       this.thumbs.pump(4);
-      if (this.activeView) {
-        this.match?.update(dt);
-        if (this.activeView) { this.activeView.update(dt); this.activeView.render(); resolve(); return; }
-      }
+      this.match?.update(dt);
+      if (this.activeView) { this.activeView.update(dt); this.activeView.render(); resolve(); return; }
       this.menu.update(dt);
       this.menu.render();
       resolve();
@@ -384,14 +361,12 @@ export class App {
     this.fps = dt;
     this.govern(realDt);
     this.thumbs.pump(2);
+    if (!this.paused && this.match?.phase === 'play') this.session.played += dt;
+    this.match?.update(this.paused ? 0 : dt);
     if (this.activeView) {
-      if (!this.paused && this.match?.phase === 'play') this.session.played += dt;
-      this.match?.update(this.paused ? 0 : dt);
-      if (this.activeView) {
-        this.activeView.update(dt);
-        this.activeView.render();
-        return;
-      }
+      this.activeView.update(dt);
+      this.activeView.render();
+      return;
     }
     this.menu.update(dt);
     this.menu.render();

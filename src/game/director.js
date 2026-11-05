@@ -7,7 +7,22 @@ import { botName } from './bot.js';
 
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 
-/** 0 (brand new) to 1 (seasoned), from match count and recent results. */
+/** How much rivals ease off, by how many matches in a row ended in the first two rounds. */
+const EASE_OFF = [0, 0, 0.1, 0.16, 0.2, 0.24];
+
+/** Matches in a row, counting back from the latest, that ended in the first two rounds. */
+export function earlyExits(recent = []) {
+  let n = 0;
+  for (let i = recent.length - 1; i >= 0 && recent[i] <= 2; i--) n++;
+  return n;
+}
+
+/**
+ * 0 (brand new) to 1 (seasoned), from match count and recent results.
+ *
+ * Losing-streak protection stays light on purpose: it only makes rivals a little less sharp, it's capped,
+ * and the first good run ends it. It never rigs a result, hands out a win or changes what a player earns.
+ */
 export function difficulty(stats) {
   const played = stats.matches || 0;
   let d = 0.1 + Math.min(played, 24) * 0.028;
@@ -16,8 +31,7 @@ export function difficulty(stats) {
     const avg = recent.reduce((a, b) => a + b, 0) / recent.length; // 1..5 rounds reached
     d += (avg - 3) * 0.05;
     // Struggling? Ease off. On a streak? Push back.
-    const last3 = recent.slice(-3);
-    if (last3.length === 3 && last3.every((r) => r <= 2)) d -= 0.14;
+    d -= EASE_OFF[Math.min(earlyExits(recent), EASE_OFF.length - 1)];
     if (stats.streak >= 2) d += 0.06 * Math.min(stats.streak, 4);
   }
   return clamp(d, 0.08, 0.92);
@@ -67,7 +81,7 @@ export function buildRoster(n, d, rand) {
     const skin = BOT_SKINS[Math.floor(rand() * BOT_SKINS.length)];
     const hatKeys = Object.keys(HATS), glassKeys = Object.keys(GLASSES), trailKeys = Object.keys(TRAILS);
     roster.push({
-      name, skin,
+      id: i, name, skin,
       hat: rand() < 0.22 ? hatKeys[1 + Math.floor(rand() * (hatKeys.length - 1))] : 'none',
       glasses: rand() < 0.16 ? glassKeys[1 + Math.floor(rand() * (glassKeys.length - 1))] : 'none',
       trail: rand() < 0.08 ? trailKeys[1 + Math.floor(rand() * (trailKeys.length - 1))] : 'none',

@@ -31,7 +31,7 @@ export function build(ctx) {
   L.addCol(makeBox(0, -0.5, 4, 24, 1, 26, {}));
   L.art((s) => s.block(0, -0.8, 4, 24.4, 1.2, 26.4, 0x4a2fa8, { top: 0x7a50f0, r: 0.3 }));
   addStartPad(L, 0, 0, 2, 11);
-  L.spawns = spawnGrid(0, 2, 16, { perRow: 6, spacingX: 2.8 });
+  L.spawns = spawnGrid(0, 2, 24, { perRow: 6, spacingX: 2.8 });
 
   const W = 22;
   // Ramp 1.

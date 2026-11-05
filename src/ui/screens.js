@@ -1,11 +1,12 @@
 // Every menu screen, laid out from the UI key art. Screens are plain DOM over the WebGL canvas, which
 // keeps text crisp at any resolution and makes the layout responsive without extra work.
-import { ICON, coinIcon, crownIcon, gemIcon, starIcon } from './icons.js';
+import { ICON, coinIcon, gemIcon, prizeIcon } from './icons.js';
 import { DAILY_REWARDS, EVENT_TRACK } from '../core/profile.js';
 import { GLASSES, HATS, SKINS } from '../assets/characters.js';
 import { BUNDLES, EMOTES, TRAILS } from '../assets/cosmetics.js';
 import { LEVELS, LEVEL_ORDER } from '../levels/index.js';
 import { particleAtlas } from '../render/textures.js';
+import { SAY, TERMS } from '../content/terms.js';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 
@@ -165,7 +166,6 @@ export class UI {
       ${this.topBar()}
       <div class="menu-col">
         <button class="btn gold lg" data-act="play" data-screen="play">Play ${ICON.next}</button>
-        <button class="btn violet item" data-act="levels">${ICON.play} Levels</button>
         <button class="btn violet item" data-act="shop">${ICON.cart} Shop</button>
         <button class="btn violet item" data-act="customize">${ICON.shirt} Customize</button>
         <button class="btn violet item" data-act="missions">${ICON.clip} Missions ${missionsReady ? `<span class="badge">${missionsReady}</span>` : ''}</button>
@@ -176,7 +176,8 @@ export class UI {
         <span><div class="t">Halloween Event!</div><div class="e" data-evend>Ends in: ${fmtEnds(p.seasonEndsIn())}</div></span>
         ${evReady ? `<span class="badge" style="position:absolute;top:-.4rem;right:-.4rem;min-width:1.35rem;height:1.35rem;border-radius:1rem;background:#ff3a6a;display:flex;align-items:center;justify-content:center;font-size:.86rem">${evReady}</span>` : ''}
       </button>
-      <div class="solo-note">Solo adventure &middot; AI rivals</div>
+      ${LEVEL_ORDER.some((id) => p.hasSeen(id)) ? `<button class="btn violet sm practice-link" data-act="practice">${ICON.retry} ${TERMS.practice}</button>` : ''}
+      <div class="solo-note">${TERMS.soloNote}</div>
     </div>`);
     this.show('menu', n);
     this.fillAvatar(n);
@@ -185,7 +186,7 @@ export class UI {
     this.every(30000, () => { const e = $('[data-evend]', n); if (e) e.textContent = `Ends in: ${fmtEnds(p.seasonEndsIn())}`; });
     this.wire(n, {
       play: () => app.startMatch(),
-      levels: () => app.goto('levels'),
+      practice: () => app.goto('practice'),
       shop: () => app.goto('shop'),
       customize: () => app.goto('customize'),
       missions: () => this.missions(),
@@ -196,40 +197,22 @@ export class UI {
     return n;
   }
 
-  // ---------------------------------------------------------------- level select
-  levels(world = 1) {
+  // ---------------------------------------------------------------- practice
+  /** Rounds the player has met in a match. It sits off the main path, and pays nothing. */
+  practice() {
     const p = this.app.profile, app = this.app;
-    const total = p.totalStars();
-    const cards = LEVEL_ORDER.map((id, i) => {
-      const L = LEVELS[id];
-      const locked = L.lockedUntilStars && total < L.lockedUntilStars;
-      const s = p.starsFor(id);
-      if (locked) {
-        return `<button class="lvl-card locked" data-act="locked" data-id="${id}"><div class="th">${ICON.lock}</div><div class="nm">${L.name}</div><div class="stars" style="font-size:1rem;color:#cdbfff;align-items:center">${starIcon(true)} ${total}/${L.lockedUntilStars}</div></button>`;
-      }
-      return `<button class="lvl-card ${i === 0 ? 'on' : ''}" data-act="go" data-id="${id}">
-        <div class="th" style="background-image:url(art/th_${id}.webp)"></div>
-        <div class="nm">${L.name}</div>
-        <div class="stars">${[0, 1, 2].map((k) => starIcon(k < s)).join('')}</div>
-      </button>`;
-    }).join('');
+    const seen = LEVEL_ORDER.filter((id) => p.hasSeen(id));
+    const cards = seen.map((id) => `<button class="lvl-card" data-act="go" data-id="${id}">
+      <div class="th" style="background-image:url(art/th_${id}.webp)"></div>
+      <div class="nm">${LEVELS[id].name}</div>
+    </button>`).join('');
     const n = el(`<div class="screen solid">
-      <div class="lvl-top"><button class="btn violet round back" data-act="back" aria-label="Back">${ICON.back}</button><div class="ribbon">Select Level</div></div>
-      <div class="world-tabs">
-        <button class="wtab on">World 1</button>
-        <button class="wtab" data-act="soon">World 2 ${ICON.lock}</button>
-        <button class="wtab" data-act="soon">World 3 ${ICON.lock}</button>
-      </div>
+      <div class="lvl-top"><button class="btn violet round back" data-act="back" aria-label="Back">${ICON.back}</button><div class="ribbon">${TERMS.practice}</div></div>
+      <p class="note practice-note">${seen.length ? 'Try any round you have met in a match. Practice earns no rewards.' : 'Rounds you meet in a match will appear here.'}</p>
       <div class="lvl-panel">${cards}</div>
     </div>`);
-    this.show('levels', n);
-    this.wire(n, {
-      back: () => app.goto('menu'),
-      go: (id) => app.startSolo(id),
-      locked: (id) => this.toast(`${ICON.lock} Collect ${LEVELS[id].lockedUntilStars} stars to unlock ${LEVELS[id].name}`),
-      soon: () => this.toast(`${ICON.sparkle} New worlds are coming soon!`),
-    });
-    void world;
+    this.show('practice', n);
+    this.wire(n, { back: () => app.goto('menu'), go: (id) => app.startPractice(id) });
   }
 
   // ---------------------------------------------------------------- shop
@@ -416,82 +399,74 @@ export class UI {
     paint();
   }
 
-  // ---------------------------------------------------------------- matchmaking
-  matchmaking(onCancel) {
-    const n = el(`<div class="screen pass">
-      <div class="mm"><h2>Finding a Match...</h2><p>Players Found: <span data-count>1</span> / 16</p><small>Solo mode &middot; AI rivals</small><div class="spinner"></div></div>
-      <div class="mm-foot"><button class="btn violet md" data-act="cancel" style="min-width:13rem">Cancel</button></div>
-    </div>`);
-    this.show('matchmaking', n);
-    this.wire(n, { cancel: onCancel });
-    return { set: (k) => { $('[data-count]', n).textContent = k; } };
-  }
-
-  // ---------------------------------------------------------------- round complete
-  roundComplete({ round, total, stars, qualified, players, time, rewards, levelName, onNext, onMenu, nextLabel = 'Next Round', auto = 12 }) {
-    const n = el(`<div class="screen pass">
-      <div class="rc-top">
-        <div class="rc-stars">${[0, 1, 2].map((k) => starIcon(k < stars)).join('')}</div>
-        <div class="ribbon rc-ribbon stroke" style="--stroke:#2a1680">Round ${round} Complete!</div>
-      </div>
-      <div class="rc-stat l">${crownIcon('big')}<div><div class="lab">Qualified</div><div class="val">${qualified} / ${players}</div></div></div>
-      <div class="rc-stat r"><span class="big">${ICON.stopwatch}</span><div><div class="lab">Time</div><div class="val">${fmtTime(time)}</div></div></div>
-      <div class="rc-rewards">
-        <div class="rc-reward">${coinIcon()} +${rewards.coins}</div>
-        <div class="rc-reward">${ICON.sparkle} +${rewards.xp} XP</div>
-      </div>
-      <div class="rc-foot">
-        <button class="btn gold md" data-act="next" data-next>${nextLabel} ${ICON.next}</button>
+  // ---------------------------------------------------------------- standings
+  /** Between rounds: who's left, who just went out, and where the player stands. */
+  standings({ round, spared, place, players, rewards, tricked, alive, entries, seconds, onNext, onMenu }) {
+    const app = this.app;
+    this.nextLabel = spared ? 'Next Round' : 'See Results';
+    const rewardRow = rewards ? `<div class="st-rewards">
+      <div class="rc-reward">${coinIcon()} +${rewards.coins}</div>
+      <div class="rc-reward">${ICON.sparkle} +${rewards.xp} XP</div>
+      <div class="rc-reward">${ICON.skull} +${rewards.candy} ${TERMS.candy}${tricked ? ' (doubled!)' : ''}</div>
+    </div>` : '';
+    const n = el(`<div class="screen pass standings">
+      <div class="ribbon st-ribbon ${spared ? '' : 'out'}">${spared ? SAY.spokenSpared() : SAY.spokenSpooked()}</div>
+      <div class="st-sub">Round ${round}: you placed <b>#${place}</b> of ${players}, and ${alive} ${alive === 1 ? 'is' : 'are'} still in</div>
+      <div class="st-grid" data-grid></div>
+      ${rewardRow}
+      <div class="st-foot">
+        <button class="btn gold md" data-act="next" data-next>${this.nextLabel} (${Math.ceil(seconds)}) ${ICON.next}</button>
         <button class="btn violet md" data-act="menu">${ICON.home} Main Menu</button>
       </div>
     </div>`);
-    this.show('roundComplete', n);
+    const grid = $('[data-grid]', n);
+    for (const e of entries) {
+      const k = el(`<div class="st-p ${e.state} ${e.isPlayer ? 'you' : ''}"><div class="pic"></div><div class="nm">${e.isPlayer ? 'You' : esc(e.name)}</div></div>`);
+      $('.pic', k).append(app.thumbs.character(e.skin, { hat: e.hat, glasses: e.glasses, w: 96, h: 96, framing: 'head', mode: 'idle', yaw: 0 }));
+      grid.append(k);
+    }
+    this.show('standings', n);
+    this.nextBtn = $('[data-next]', n);
     this.wire(n, { next: onNext, menu: onMenu });
-    let left = auto;
-    const nb = $('[data-next]', n);
-    this.every(1000, () => {
-      left--;
-      if (left <= 3 && left > 0) nb.innerHTML = `${nextLabel} (${left}) ${ICON.next}`;
-      if (left <= 0) { this.timers.forEach((t) => clearInterval(t)); onNext(); }
-    });
-    void total; void levelName;
     return n;
   }
 
-  /** Second-chance offer. Accept and decline buttons match in size, as the rules require. */
-  revive({ onAccept, onDecline, seconds = 5 }) {
+  standingsTick(left) {
+    if (!this.nextBtn?.isConnected) return;
+    const s = Math.max(0, Math.ceil(left));
+    if (s === this._tick) return;
+    this._tick = s;
+    this.nextBtn.innerHTML = `${this.nextLabel} (${s}) ${ICON.next}`;
+  }
+
+  // ---------------------------------------------------------------- end of a practice run
+  practiceDone({ name, finished, place, players, time, race, onAgain, onBack }) {
+    const line = race ? (finished ? `Finished #${place} of ${players} in ${fmtTime(time)}` : `Out after ${fmtTime(time)}`) : `Placed #${place} of ${players}`;
     const n = el(`<div class="screen pass">
-      <div class="center-msg" style="pointer-events:auto">
-        <div class="big-msg red stroke" style="font-size:4.4rem">Eliminated!</div>
-        <div class="modal" style="width:30rem;margin-top:1rem;text-align:center">
-          <h2>Second Chance?</h2>
-          <p class="note" style="font-size:1.16rem">Watch a short video to continue to the next round. Once per session.</p>
-          <div class="foot">
-            <button class="btn violet md" style="min-width:12rem" data-act="yes">${ICON.video} Watch Video</button>
-            <button class="btn violet md" style="min-width:12rem" data-act="no">No Thanks (<span data-n>${seconds}</span>)</button>
-          </div>
+      <div style="text-align:center;margin-top:1.4rem">
+        <div class="res-title stroke">${name}</div>
+        <div class="res-sub">${line}</div>
+      </div>
+      <div class="res-mid">
+        <p class="note">Practice earns no rewards</p>
+        <div class="res-rows">
+          <button class="btn gold md" data-act="again">${ICON.retry} Try Again</button>
+          <button class="btn violet md" data-act="back">${ICON.back} Back</button>
         </div>
       </div>
     </div>`);
-    this.show('revive', n);
-    this.wire(n, { yes: onAccept, no: onDecline });
-    let left = seconds;
-    this.every(1000, () => {
-      left--;
-      const c = $('[data-n]', n);
-      if (c) c.textContent = left;
-      if (left <= 0) { this.timers.forEach((t) => clearInterval(t)); onDecline(); }
-    });
+    this.show('practiceDone', n);
+    this.wire(n, { again: onAgain, back: onBack });
   }
 
   // ---------------------------------------------------------------- match results
-  results({ crown, reached, totalRounds, place, rewards, levelUps, canDouble, onDouble, onAgain, onMenu, soloStars = null, nextLevel = null }) {
-    const title = crown ? 'Champion!' : soloStars !== null ? (soloStars > 0 ? 'Level Clear!' : 'So Close!') : 'Eliminated!';
-    const sub = crown ? 'You took the crown!' : soloStars !== null ? `${soloStars} of 3 stars` : `You reached round ${reached} of ${totalRounds} · #${place}`;
+  results({ won, reached, totalRounds, place, rewards, levelUps, canDouble, onDouble, onAgain, onMenu }) {
+    const title = won ? SAY.spokenChampion() : SAY.spokenSpooked();
+    const sub = won ? SAY.youWon() : `You reached round ${reached} of ${totalRounds} · #${place}`;
     const n = el(`<div class="screen pass">
-      ${crown || soloStars ? `<div class="rc-stars" style="justify-content:center;margin-top:0.2rem">${[0, 1, 2].map((k) => starIcon(k < (crown ? 3 : soloStars))).join('')}</div>` : ''}
-      <div style="text-align:center;margin-top:${crown || soloStars ? '0.2rem' : '1.4rem'}">
-        <div class="res-title stroke ${crown ? 'crown' : ''}">${title}</div>
+      ${won ? `<div class="res-prize">${prizeIcon()}</div>` : ''}
+      <div style="text-align:center;margin-top:${won ? '0.2rem' : '1.4rem'}">
+        <div class="res-title stroke ${won ? 'won' : ''}">${title}</div>
         <div class="res-sub">${sub}</div>
       </div>
       <div class="res-mid">
@@ -499,20 +474,19 @@ export class UI {
           <div class="rc-reward" data-rw-coins>${coinIcon()} +${rewards.coins}</div>
           ${rewards.gems ? `<div class="rc-reward">${gemIcon()} +${rewards.gems}</div>` : ''}
           <div class="rc-reward">${ICON.sparkle} +${rewards.xp} XP</div>
-          <div class="rc-reward">${ICON.skull} +${rewards.event} Candy</div>
+          <div class="rc-reward">${ICON.skull} +${rewards.event} ${TERMS.candy}</div>
           ${levelUps ? `<div class="rc-reward" style="color:#ffe25a">Level up! ${levelUps > 1 ? `x${levelUps}` : ''}</div>` : ''}
         </div>
         ${canDouble ? `<button class="btn mint sm" data-act="double">${ICON.video} Double coins (+${rewards.coins})</button>` : ''}
         <div class="res-rows">
-          ${nextLevel ? `<button class="btn gold md" data-act="nextlvl">Next Level ${ICON.next}</button>` : ''}
-          <button class="btn ${nextLevel ? 'violet' : 'gold'} md" data-act="again">${ICON.retry} ${soloStars !== null ? 'Retry' : 'Play Again'}</button>
+          <button class="btn gold md" data-act="again">${ICON.retry} Play Again</button>
           <button class="btn violet md" data-act="menu">${ICON.home} Main Menu</button>
         </div>
       </div>
     </div>`);
     this.show('results', n);
     this.wire(n, {
-      again: onAgain, menu: onMenu, nextlvl: () => nextLevel?.(),
+      again: onAgain, menu: onMenu,
       double: async (_, b) => {
         b.disabled = true;
         const ok = await onDouble();
@@ -660,8 +634,8 @@ export class UI {
           <div class="mrw">${m.coins ? `${coinIcon()} ${m.coins}` : ''} ${m.gems ? `${gemIcon()} ${m.gems}` : ''}</div>
           ${m.claimed ? `<span class="btn violet sm" style="opacity:.6">${ICON.check}</span>` : m.done ? `<button class="btn gold sm" data-act="claim" data-id="${m.id}">Claim</button>` : `<span class="btn violet sm" style="opacity:.7;cursor:default">${m.progress}/${m.need}</span>`}
         </div>`).join('')}
-        <p class="note">New missions every day. Each one also earns Candy for the Halloween Event.</p>
-        <div class="row" style="justify-content:space-around;font-size:1.04rem;margin-top:.3rem"><span>${crownIcon()} ${stats.crowns} crowns</span><span>${stats.matches} matches</span><span>Best streak ${stats.bestStreak}</span></div>`;
+        <p class="note">New missions every day. Each one also earns ${TERMS.candy} for the Halloween Event.</p>
+        <div class="row" style="justify-content:space-around;font-size:1.04rem;margin-top:.3rem"><span>${prizeIcon()} ${stats.wins} ${TERMS.prizes}</span><span>${stats.matches} matches</span><span>Best streak ${stats.bestStreak}</span></div>`;
       return html;
     };
     const s = this.openModal(paint(), {
@@ -688,7 +662,7 @@ export class UI {
     const amt = [60, 40, 25][p.d.freeCoinsCount] ?? 25;
     this.openModal(`<button class="btn violet round x" data-act="close" aria-label="Close">${ICON.back}</button><h2>Get Coins</h2>
       ${short ? `<p class="note" style="font-size:1.1rem">You need ${short} more coins.</p>` : ''}
-      <p class="note" style="font-size:1.1rem;margin:.4rem 0">You earn coins every round you qualify, from daily missions and the Halloween Event.</p>
+      <p class="note" style="font-size:1.1rem;margin:.4rem 0">You earn coins every round you're ${TERMS.spared.toLowerCase()}, from daily missions and the Halloween Event.</p>
       ${can ? `<div class="foot"><button class="btn gold md" data-act="watch">${ICON.video} Watch Video: +${amt} ${coinIcon()}</button><button class="btn gold md" data-act="close">No Thanks</button></div><p class="note">${p.freeCoinsLeft()} left today</p>` : '<div class="foot"><button class="btn gold md" data-act="close">Got It</button></div>'}`, {
       watch: async () => {
         this.closeModal();
@@ -700,7 +674,7 @@ export class UI {
 
   gemsInfo() {
     this.openModal(`<button class="btn violet round x" data-act="close" aria-label="Close">${ICON.back}</button><h2>Gems</h2>
-      <p class="note" style="font-size:1.14rem">Gems are earned by levelling up, winning crowns, completing missions and climbing the Halloween Event track.</p>
+      <p class="note" style="font-size:1.14rem">Gems are earned by levelling up, winning a ${TERMS.prize}, completing missions and climbing the Halloween Event track.</p>
       <div class="foot"><button class="btn gold md" data-act="close">Got It</button></div>`);
   }
 
@@ -708,7 +682,7 @@ export class UI {
     const n = this.openModal(`<h2>Paused</h2>
       <div class="foot" style="flex-direction:column;align-items:stretch">
         <button class="btn gold md" data-act="resume">${ICON.play} Resume</button>
-        ${canRestart ? `<button class="btn violet md" data-act="restart">${ICON.retry} Restart Level</button>` : ''}
+        ${canRestart ? `<button class="btn violet md" data-act="restart">${ICON.retry} Try Again</button>` : ''}
         <button class="btn violet md" data-act="opts">${ICON.gear} Settings</button>
         <button class="btn violet md" data-act="quit">${ICON.home} Main Menu</button>
       </div>`, {

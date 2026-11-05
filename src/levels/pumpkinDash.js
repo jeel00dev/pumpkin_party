@@ -77,7 +77,7 @@ export function build(ctx) {
   L.addCol(makeCyl(0, -0.5, 4, 13.2, 1, {}));
   addStartPad(L, 0, 0, 4, 13.2);
   L.floor({ z: -20, w: 16, d: 24, tile: TILE });
-  L.spawns = spawnGrid(0, 4, 16);
+  L.spawns = spawnGrid(0, 4, 24);
 
   // --- B: hammer alley (teach) ---------------------------------------------------------
   L.floor({ z: -66, w: W, d: 68, tile: TILE });
@@ -94,7 +94,7 @@ export function build(ctx) {
   L.spinDisc({ x: 3.6, y: 0, z: -116, R: 3.7, speed: 0.9, c1: 0xff9022, c2: 0x7a3ae8 });
   L.spinDisc({ x: 0, y: 0, z: -126.5, R: 3.9, speed: -0.7, c1: 0x7a3ae8, c2: 0xff9022 });
   // The safe plank: longer, narrow, no timing required.
-  L.floor({ x: 8.6, z: -116, w: 2.2, d: 35, tile: 2.2, kind: 'crown', palette: FLOOR_PALETTES.magenta });
+  L.floor({ x: 8.6, z: -116, w: 2.2, d: 35, tile: 2.2, kind: 'candy', palette: FLOOR_PALETTES.magenta });
   L.floor({ x: 6.4, z: -99.5, w: 6.4, d: 2.2, tile: 2.2, palette: FLOOR_PALETTES.magenta });
   L.floor({ x: 6.4, z: -132.5, w: 6.4, d: 2.2, tile: 2.2, palette: FLOOR_PALETTES.magenta });
 

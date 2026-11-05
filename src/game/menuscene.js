@@ -15,7 +15,6 @@ import { makeCanvas, toTexture } from '../render/textures.js';
 const PRESETS = {
   title: { pos: [0, 2.4, 10.5], look: [0, 2.2, 0], fov: 36, hero: [0, 0, 3.4], heroYaw: 0.1, mode: 'run', friends: true },
   menu: { pos: [0, 1.85, 7.7], look: [0, 1.75, 0], fov: 36, hero: [0.5, 0, 0], heroYaw: -0.08, mode: 'pose', friends: false, parallax: 1 },
-  match: { pos: [0, 2.4, 9.4], look: [0, 4.2, -20], fov: 42, hero: [0, 0, 1.4], heroYaw: Math.PI, mode: 'idle', friends: false, crowd: true },
   complete: { pos: [0, 2.75, 7.4], look: [0, 2.2, 0], fov: 36, hero: [0, 0, 0], heroYaw: 0.04, mode: 'win', friends: false, spots: true },
   lose: { pos: [0, 2.7, 7], look: [0, 2.05, 0], fov: 36, hero: [0, 0, 0], heroYaw: 0, mode: 'lose', friends: false, dim: true },
   champion: { pos: [0, 3.1, 7.6], look: [0, 2.5, 0], fov: 36, hero: [0, 0.75, 0], heroYaw: 0, mode: 'win', friends: false, spots: true, podium: true },
@@ -28,13 +27,6 @@ const FRIENDS = [
   { skin: 'skeleton', x: 2.6, z: 0.3, yaw: -0.35 },
   { skin: 'mummy', x: 4.3, z: -0.4, yaw: -0.4 },
   { skin: 'witch', x: 6.1, z: -1.2, yaw: -0.5 },
-];
-
-const CROWD = [
-  { skin: 'ghost', x: -2.4, z: 0.9 }, { skin: 'witch', x: 2.5, z: 0.7 }, { skin: 'skeleton', x: -4.6, z: -0.2 }, { skin: 'mummy', x: 4.6, z: -0.3 },
-  { skin: 'franky', x: -6.7, z: -1.2 }, { skin: 'imp', x: 6.6, z: -1.3 }, { skin: 'scarecrow', x: -1.2, z: -2.4 }, { skin: 'vampire', x: 1.4, z: -2.6 },
-  { skin: 'ember', x: -3.4, z: -3.1 }, { skin: 'cat', x: 3.5, z: -3.2 }, { skin: 'ghost', x: -5.6, z: -3.7 }, { skin: 'franky', x: 5.6, z: -3.9 },
-  { skin: 'imp', x: 0, z: -4.7 }, { skin: 'mummy', x: -2.2, z: -5.2 }, { skin: 'skeleton', x: 2.3, z: -5.4 },
 ];
 
 export class MenuScene {
@@ -63,7 +55,6 @@ export class MenuScene {
     this.fov = this.preset.fov;
     this.heroYaw = 0;
     this.friends = [];
-    this.crowd = [];
     this.mouseX = 0; this.mouseY = 0;
     window.addEventListener('mousemove', (e) => {
       this.mouseX = (e.clientX / innerWidth - 0.5) * 2;
@@ -83,7 +74,7 @@ export class MenuScene {
 
     // The road to the castle, then a plaza around the stage.
     L.floor({ z: -105, w: 13, d: 200, tile: 4.33, collide: false });
-    L.floor({ z: 2, w: 36, d: 24, tile: 4, collide: false, palette: FLOOR_PALETTES.crown });
+    L.floor({ z: 2, w: 36, d: 24, tile: 4, collide: false, palette: FLOOR_PALETTES.candy });
 
     // Round stage with a glossy top and rings of light, as on the menu art.
     L.art((S, group) => {
@@ -215,32 +206,6 @@ export class MenuScene {
     });
   }
 
-  ensureCrowd() {
-    if (this.crowd.length) return;
-    const tier = this.app.pipe.tier;
-    this.crowd = CROWD.map((f, i) => {
-      const c = new CharacterMesh(f.skin, { detail: 0, tier, accMaterial: this.accMat, shadow: tier.shadow > 0 && i < 6 });
-      c.root.position.set(f.x, 0.34, f.z);
-      c.root.rotation.y = Math.PI + (f.x * -0.02);
-      c.root.visible = false;
-      this.scene.add(c.root);
-      return { c, a: new Animator(c, i * 2.1), d: f, shown: 0, popped: false };
-    });
-  }
-
-  /** Show n people from the crowd, popping them in as they "join". */
-  setCrowd(n) {
-    this.ensureCrowd();
-    this.crowd.forEach((p, i) => {
-      const should = i < n;
-      if (should && !p.c.root.visible) {
-        p.c.root.visible = true;
-        p.a.jump();
-        this.particles.ringPulse(p.d.x, 0.7, p.d.z, 2, 0x53f0ff);
-      } else if (!should) p.c.root.visible = false;
-    });
-  }
-
   setMode(mode, opts = {}) {
     if (!PRESETS[mode]) return;
     this.mode = mode;
@@ -248,7 +213,6 @@ export class MenuScene {
     this.heroMode = opts.heroMode || this.preset.mode;
     if (this.preset.friends) this.ensureFriends();
     for (const f of this.friends) f.c.root.visible = !!this.preset.friends;
-    if (!this.preset.crowd) for (const p of this.crowd) p.c.root.visible = false;
     this.spots.visible = !!this.preset.spots;
     const st = !!this.preset.studio;
     this.level.group.visible = !st;
@@ -301,7 +265,6 @@ export class MenuScene {
       H.a.update(dt, { mode, emote: H.emote, speed: mode === 'run' ? 5 : 0, fwdX: 0, fwdZ: 1, grounded: true });
     }
     if (p.friends) for (const f of this.friends) f.a.update(dt, { mode: 'run', speed: 3.2 + Math.sin(this.t + f.d.x) * 0.8, fwdX: 0, fwdZ: 1, grounded: true });
-    if (p.crowd) for (const q of this.crowd) if (q.c.root.visible) q.a.update(dt, { mode: 'idle', speed: 0, fwdX: 0, fwdZ: -1, grounded: true });
     if (this.spots.visible) {
       this.spots.children.forEach((m, i) => { m.rotation.z = m.userData.base + Math.sin(this.t * 0.8 + i * 1.4) * 0.16; });
     }

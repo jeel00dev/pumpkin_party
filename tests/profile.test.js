@@ -4,7 +4,7 @@ const store = new Map();
 vi.stubGlobal('localStorage', { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k) });
 
 const { Profile, EVENT_TRACK, DAILY_REWARDS } = await import('../src/core/profile.js');
-const { difficulty, botSkill } = await import('../src/game/director.js');
+const { difficulty, botSkill, earlyExits } = await import('../src/game/director.js');
 
 describe('profile and economy', () => {
   let p;
@@ -62,6 +62,27 @@ describe('profile and economy', () => {
     expect(EVENT_TRACK[EVENT_TRACK.length - 1].reward.item).toEqual(['skin', 'goldking']);
   });
 
+  it('remembers the rounds a player has met, for Practice', () => {
+    expect(p.hasSeen('ghostChase')).toBe(false);
+    p.markSeen('ghostChase');
+    p.save(true);
+    expect(new Profile().load().hasSeen('ghostChase')).toBe(true);
+  });
+
+  it('reports completion from rounds met and wins, never above 100', () => {
+    expect(p.completion(6)).toBe(0);
+    for (const id of ['a', 'b', 'c']) p.markSeen(id);
+    expect(p.completion(6)).toBe(35);
+    p.d.stats.wins = 40;
+    expect(p.completion(3)).toBe(100);
+  });
+
+  it('has no trace of stars or second chances', () => {
+    expect(p.d.stars).toBeUndefined();
+    expect(p.d.flags.reviveUsed).toBeUndefined();
+    expect(p.starsFor).toBeUndefined();
+  });
+
   it('saves and reloads progress through storage', () => {
     p.d.coins = 4242;
     p.save(true);
@@ -88,6 +109,19 @@ describe('difficulty director', () => {
     const a = difficulty({ matches: 10, recent: [3, 3, 3], streak: 0 });
     const b = difficulty({ matches: 10, recent: [1, 1, 1], streak: 0 });
     expect(b).toBeLessThan(a);
+  });
+
+  it('losing-streak protection grows with the streak, stays capped, and ends on the first good run', () => {
+    const at = (recent) => difficulty({ matches: 12, recent, streak: 0 });
+    const base = [3, 3, 3, 3, 3, 3, 3, 3];
+    const withStreak = (n) => [...base.slice(n), ...Array(n).fill(1)];
+    expect(earlyExits(withStreak(4))).toBe(4);
+    expect(earlyExits([1, 1, 3])).toBe(0);
+    const drop = (n) => at(base) - at(withStreak(n));
+    // Light on purpose. Most of each drop comes from the streak term, and none of it can exceed the cap.
+    for (let n = 2; n < 6; n++) expect(drop(n + 1)).toBeGreaterThan(drop(n));
+    expect(drop(8) - ((3 - 1) * 0.05)).toBeLessThanOrEqual(0.2401);
+    expect(at([1, 1, 1, 1, 1, 4])).toBeGreaterThan(at([1, 1, 1, 1, 1, 1]) + 0.2);
   });
 
   it('bot skill stays in range', () => {

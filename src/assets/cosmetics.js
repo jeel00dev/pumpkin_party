@@ -25,7 +25,7 @@ export const EMOTES = {
 /** Bundles: buy several at once, slightly cheaper. */
 export const BUNDLES = {
   spooky: { name: 'Spooky Starter', price: 700, items: [['skin', 'ghost'], ['hat', 'witch'], ['trail', 'embers']], tint: '#ff9022' },
-  monster: { name: 'Monster Mash', price: 1100, items: [['skin', 'franky'], ['skin', 'mummy'], ['emote', 'flex']], tint: '#7fd03f' },
+  monster: { name: 'Graveyard Gang', price: 1100, items: [['skin', 'franky'], ['skin', 'mummy'], ['emote', 'flex']], tint: '#7fd03f' },
   royal: { name: 'Royal Night', price: 1800, items: [['skin', 'vampire'], ['hat', 'crown'], ['trail', 'stars']], tint: '#b040e8' },
 };
 

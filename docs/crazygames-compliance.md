@@ -16,7 +16,7 @@ Checked against the [CrazyGames developer docs](https://docs.crazygames.com/requ
 | Works in the app's fullscreen; safe areas respected | ✅ `env(safe-area-inset-*)` throughout the UI | `ui/ui.css` |
 | iOS audio resumes after an interruption, on a user gesture | ✅ every gesture calls `resume()` | `core/audio.js` |
 | Orientation lock logic not needed | ✅ none; set landscape in the portal | |
-| `gameplayStart` when playable, `gameplayStop` in menus and pauses, never on tab switch | ✅ e2e checks the order | `game/match.js`, `game/app.js` |
+| `gameplayStart` when a round starts or resumes, `gameplayStop` at every break, never on tab switch | ✅ e2e checks all of these. A tab switch still pauses the round, but tells the SDK nothing, as the docs ask: "Don't call this event when the user switches focus or leaves the game area". The lobby is a waiting area, so it isn't reported as gameplay | `game/match.js`, `game/app.js` |
 | Data module for saves, read at load, with fallback | ✅ e2e | `core/profile.js` |
 | Don't call the SDK when `environment` is `disabled` | ✅ e2e | `core/sdk.js` |
 | Personal data notice | ✅ not needed: nothing is collected beyond SDK events | |
@@ -25,8 +25,8 @@ Checked against the [CrazyGames developer docs](https://docs.crazygames.com/requ
 
 | Rule | Status | Where |
 |---|---|---|
-| Land new users in gameplay immediately, or within one click | ✅ first launch goes straight to a round, no click; returning players are one click from Play. e2e | `game/app.js` |
-| Legible at DPR 1 at every listed size (821x462 to 1920x1080, mobile 800x450, tablet 1080x607) | ✅ e2e checks overflow and font sizes; screens reviewed by eye at 821x462 and 800x450 | `ui/screens.js` `onResize` |
+| Land new users in gameplay immediately, or within one click | ✅ first launch goes straight to a round with no lobby or reveal; returning players are one click from a match. e2e. A daily reward popup can sit in front of Play once a day, which Milestone 4 replaces | `game/app.js`, `game/match.js` |
+| Legible at DPR 1 at every listed size | ✅ e2e checks overflow and font sizes at all ten: 821x462, 907x510, 1077x606, 1216x684, 1280x720, 1366x768, 1536x864, 1920x1080, mobile 800x450, tablet 1080x607. The lobby, Spirit Board and standings are checked at four of those | `ui/screens.js` `onResize`, `e2e/flow.spec.js` |
 | Consistent physics at 144 and 165 Hz | ✅ fixed 120 Hz step with interpolation. Unit tested, but not observed on a real high-refresh display | `game/simulation.js`, `game/roundview.js` |
 | English localisation | ✅ all text is English. Locale is read from the SDK; no translations yet | |
 | No custom fullscreen button | ✅ e2e | |
@@ -49,11 +49,11 @@ The concept art has a **Quit** button on the title screen. It's left out: a brow
 | Midgame only at natural breaks, never from a navigation button | ✅ automatic, between matches, after 3 minutes of play | `game/match.js` |
 | Mute only once the ad starts; unmute and resume on finish or error | ✅ e2e | `game/app.js` |
 | Block input while an ad is pending | ✅ spinner overlay | `game/app.js` |
-| Rewarded offers: never on an active gameplay screen | ✅ results, second-chance and coin screens only | |
+| Rewarded offers: never on an active gameplay screen | ✅ results and coin screens only. The old second-chance offer is gone, so a match never combines a midgame ad with a keep-playing offer | |
 | No reward on `adError` | ✅ e2e | |
-| Decline matches accept in size, font and colour; not delayed | ✅ e2e checks the free-coins offer; second chance uses the same button style | `ui/screens.js` |
+| Decline matches accept in size, font and colour; not delayed | ✅ e2e checks the free-coins offer | `ui/screens.js` |
 | Video icon on the offer; reward stated | ✅ | |
-| Rewards also available by playing; offered infrequently | ✅ coins are earned in play; free coins capped at 3 a day, second chance once a session | `core/profile.js` |
+| Rewards also available by playing; offered infrequently | ✅ coins are earned in play; free coins capped at 3 a day | `core/profile.js` |
 | Banners not during gameplay; must not block UI | ✅ shop only, in a reserved slot, on screens taller than 520 px | `ui/screens.js` |
 
 ## Account
@@ -67,7 +67,7 @@ The concept art has a **Quit** button on the title screen. It's left out: a brow
 
 ## Bots
 
-The docs don't address AI opponents. The game doesn't claim to be multiplayer: the menu and the matchmaking screen both say "AI rivals", and rival names are playful rather than imitating real usernames. **Don't select the Multiplayer tag** when submitting. The Quality guidelines ask that the "name and imagery should accurately reflect the gameplay".
+The docs don't address AI opponents. The game doesn't claim to be multiplayer: the menu and the lobby both say "AI rivals", there's no "finding players" step, and rival names are playful rather than imitating real usernames. **Don't select the Multiplayer tag** when submitting. The Quality guidelines ask that the "name and imagery should accurately reflect the gameplay".
 
 ## Before you submit
 
@@ -75,14 +75,14 @@ These need you, as they can't be checked from here:
 
 1. Select **Yes, using the Data Module** under progress saving, or the module stays disabled.
 2. Run the build through the [QA tool](https://docs.crazygames.com/) in the Developer Portal, on a real phone and on Safari.
-3. Check that "Pumpkin Party" isn't already taken on CrazyGames or trademarked.
+3. Decide whether to keep the name "Pumpkin Party". Other small games already use it: see `docs/name-check.md`. It also needs a proper trademark check.
 4. Two of your reference images (the purple course with pumpkin hammers and "Finish" arch, and the moonlit lake with the pumpkin house) look like screenshots from other games or asset packs. I used them only as mood reference and nothing was copied from them, but don't upload those images themselves as covers or marketing.
 
 ## Portal copy (ready to paste)
 
 **Description**
 
-Pumpkin Party is a Halloween knockout platformer. Race down the castle causeway, dodge giant hammers and rolling pumpkins, outrun a giant ghost, and stay on your feet as the floor falls away. Each round knocks more rivals out, until one is left to take the crown. Play solo against AI opponents that get smarter as you improve. Earn coins to unlock skins, hats, glasses, trails and emotes, complete daily missions, and climb the Halloween Event track for an exclusive Golden Jack skin.
+Pumpkin Party is a Halloween knockout platformer. Race down the castle causeway, dodge giant hammers and rolling pumpkins, outrun a giant ghost, and stay on your feet as the floor falls away. The Spirit Board picks each round, and some come with a choice: play it safe, or take a curse for double candy. Each round spooks more rivals, until one is left to take the Golden Treat. Play solo against AI opponents that get smarter as you improve. Earn coins to unlock skins, hats, glasses, trails and emotes, complete daily missions, and climb the Halloween Event track for an exclusive Golden Jack skin.
 
 **Controls**
 

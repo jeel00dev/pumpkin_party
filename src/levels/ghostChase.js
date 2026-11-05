@@ -16,7 +16,7 @@ function conveyorStrip(L, { x = 0, y0, y1, z0, z1, w, speed = 3 }) {
   const dz = z1 - z0, dy = y1 - y0, len = Math.hypot(dz, dy);
   const pitch = Math.atan2(dy, Math.abs(dz));
   const cy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
-  L.ramp({ x, y0, z0, y1, z1, w, conveyor: speed, kind: 'crown', palette: BLUE });
+  L.ramp({ x, y0, z0, y1, z1, w, conveyor: speed, kind: 'candy', palette: BLUE });
   L.art((s, group) => {
     const c = document.createElement('canvas');
     c.width = 128; c.height = 128;
@@ -124,7 +124,7 @@ export function build(ctx) {
   L.addCol(makeBox(0, -0.5, 4, 22, 1, 22, {}));
   addStartPad(L, 0, 0, 4, 11);
   L.art((s) => { s.block(0, -0.8, 4, 22.4, 1.2, 22.4, 0x4453e0, { top: 0x6a7cf8, r: 0.3 }); });
-  L.spawns = spawnGrid(0, 4, 16);
+  L.spawns = spawnGrid(0, 4, 24);
 
   // --- Patrol ghosts --------------------------------------------------------------------
   L.floor({ z: -39, w: 16, d: 72, tile: 4, palette: BLUE });

@@ -120,7 +120,7 @@ export class Bot {
 
     // Look ahead along the path for moving obstacles, sampling several moments in the future.
     const obs = L.obstacles;
-    const lookT = 0.34 + skill * 0.5;
+    const lookT = (0.34 + skill * 0.5) * L.world.mods.botSight;
     const stride = Math.max(spd, 3.5);
     if (this.rand() < hazardMemory) {
       const margin = 0.35 + skill * 0.65;

@@ -1,8 +1,8 @@
 // CrazyGames SDK v3 wrapper. Every call is guarded, because `SDK.environment === 'disabled'` makes SDK
 // methods throw, and the game must keep running with ad blockers, offline, or on any other host.
 //
-// Launch stage: Basic Launch keeps ads and banners off. Build with VITE_LAUNCH_STAGE=full for Full Launch.
-export const LAUNCH_STAGE = import.meta.env?.VITE_LAUNCH_STAGE || 'basic';
+// Launch stage: Basic Launch keeps ads and banners off. `npm run build:full` builds in `full` mode for Full Launch.
+export const LAUNCH_STAGE = import.meta.env?.MODE === 'full' ? 'full' : 'basic';
 
 const SCRIPT_TIMEOUT = 4000; // if the script fails outright its onerror ends the wait at once
 

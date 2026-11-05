@@ -5,6 +5,15 @@
 // next gesture, and honours CrazyGames' muteAudio setting over the in-game toggles.
 const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
+/** Every sound the game can make, grouped for the sound test page. A unit test keeps this complete. */
+export const SOUND_GROUPS = {
+  Movement: ['jump', 'land', 'dive', 'boing', 'shove', 'thud', 'splash', 'respawn'],
+  'Hazards and hits': ['bonk', 'crack', 'drop', 'curse', 'boo', 'whoosh'],
+  'Round moments': ['count', 'go', 'qualify', 'ping', 'star', 'win', 'lose', 'planchette', 'reveal'],
+  'Menus and rewards': ['click', 'hover', 'tab', 'coin', 'buy', 'equip', 'error', 'levelup'],
+};
+export const MUSIC_TRACKS = ['menu', 'race', 'final'];
+
 export class Audio {
   constructor() {
     this.ctx = null;
@@ -241,6 +250,14 @@ export class Audio {
         break;
       case 'shove':
         this._tone(t, { type: 'sine', f0: 180 * R, f1: 90, dur: 0.07, vol: 0.14 * V });
+        break;
+      case 'planchette':
+        this._noise(t, { dur: 0.13, vol: 0.13 * V, f0: 1300 * R, f1: 800 * R, type: 'bandpass', q: 3 });
+        this._tone(t, { type: 'triangle', f0: 340 * R, f1: 300 * R, dur: 0.1, vol: 0.09 * V });
+        break;
+      case 'reveal':
+        [62, 69, 74, 77].forEach((n, i) => this._tone(t + i * 0.05, { type: 'sine', f0: mtof(n), dur: 0.6, vol: 0.15 * V, vib: 5, vibRate: 5 }));
+        this._noise(t, { dur: 0.5, vol: 0.05 * V, f0: 700, f1: 3000, type: 'bandpass', q: 2 });
         break;
       default:
     }

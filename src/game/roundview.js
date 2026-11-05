@@ -1,7 +1,7 @@
 // Presents one Simulation: character meshes, particles, camera and the frame step. Holds no game rules.
 import * as THREE from 'three';
 import { Simulation, STEP } from './simulation.js';
-import { CharacterMesh } from '../assets/characters.js';
+import { BONE, CharacterMesh } from '../assets/characters.js';
 import { Animator } from '../assets/animator.js';
 import { S } from '../physics/racer.js';
 import { THEMES, applyThemeToScene, buildEnvironment, buildLights, buildSky } from '../render/sky.js';
@@ -21,7 +21,7 @@ export class RoundView {
   /**
    * @param {object} app  renderer pipeline, input, audio
    * @param {object} def  level definition
-   * @param {object} opts { seed, racers, quota, pacing, onEvent }
+   * @param {object} opts { seed, racers, quota, pacing, onEvent, curse }
    */
   constructor(app, def, opts) {
     this.app = app;
@@ -29,12 +29,13 @@ export class RoundView {
     this.opts = opts;
     this.onEvent = opts.onEvent || (() => {});
     const tier = app.pipe.tier;
-    this.sim = new Simulation(def.build, { tier, headless: false, seed: opts.seed, racers: opts.racers, quota: opts.quota, pacing: opts.pacing, difficulty: opts.difficulty, autoPlayer: app.autoplay });
+    this.sim = new Simulation(def.build, { tier, headless: false, seed: opts.seed, racers: opts.racers, quota: opts.quota, pacing: opts.pacing, difficulty: opts.difficulty, curse: opts.curse, autoPlayer: app.autoplay });
     this.level = this.sim.level;
     this.scene = new THREE.Scene();
-    this.theme = THEMES[this.level.theme] || THEMES.violet;
-    let env = envCache.get(this.level.theme);
-    if (!env) { env = buildEnvironment(app.pipe.renderer, this.theme); envCache.set(this.level.theme, env); }
+    const themeName = this.level.themeName;
+    this.theme = THEMES[themeName] || THEMES.violet;
+    let env = envCache.get(themeName);
+    if (!env) { env = buildEnvironment(app.pipe.renderer, this.theme); envCache.set(themeName, env); }
     this.sky = buildSky(this.theme, { clouds: tier.detail === 0 ? 8 : 18, seed: (opts.seed % 90) + 2 });
     applyThemeToScene(this.scene, this.theme, env, this.sky);
     this.lights = buildLights(this.theme, tier);
@@ -46,6 +47,7 @@ export class RoundView {
     this.cam = new ChaseCamera(app.width / app.height);
     this.cam.setAspect(app.width / app.height);
     this.cam.camera.fov = this.cam.fovBase;
+    if (this.sim.world.mods.fog) this.cam.camera.far = 64;
     this.cam.camera.updateProjectionMatrix();
     this.cam.sens = 1;
     this.cam.reduced = !!app.settings?.reducedShake;
@@ -53,6 +55,8 @@ export class RoundView {
     this.accMat = toy({ key: 'acc' });
 
     // Characters.
+    const mods = this.sim.world.mods;
+    this.bodyScale = mods.body;
     this.views = this.sim.racers.map((r, i) => {
       const def2 = r.def;
       const detail = r.isPlayer ? 1 : 0;
@@ -62,6 +66,8 @@ export class RoundView {
       });
       c.root.position.set(r.x, r.y, r.z);
       c.root.rotation.y = r.yaw;
+      c.root.scale.setScalar(mods.body);
+      c.bones[BONE.head].scale.setScalar(mods.headScale);
       this.scene.add(c.root);
       const a = new Animator(c, i * 1.37);
       return { r, c, a, wasGrounded: false, trail: 0 };
@@ -72,6 +78,17 @@ export class RoundView {
     if (tier.shadow === 0) this.buildBlobs();
 
     this.buildMarker();
+
+    // In a fog curse the player carries the only light worth having. The view ends where the fog
+    // does, so nothing far away shows through it, on any quality tier.
+    if (mods.fog) {
+      this.lantern = new THREE.PointLight(0xffc27a, 34, 24, 2);
+      this.scene.add(this.lantern);
+      this.sky.visible = false;
+      this.scene.background = new THREE.Color(this.theme.fog);
+      this.level.group.traverse((o) => { if (o.material?.userData?.glass) o.visible = false; });
+    }
+    this.headLift = (mods.headScale - 1) * 0.9;
 
     this.accum = 0;
     this.dtScale = 1;
@@ -186,6 +203,7 @@ export class RoundView {
     this.sky.onCameraMove(this.cam.camera);
     const focus = this.sim.player && !this.sim.player.hidden ? this.sim.player : (this.spectate || { x: this.cam.tx, y: this.cam.groundY, z: this.cam.tz });
     this.lights.follow(focus);
+    this.lantern?.position.set(focus.x, (focus.y ?? 0) + 3.4, focus.z);
   }
 
   routeYawAt(r) {
@@ -374,7 +392,8 @@ export class RoundView {
         _quat.set(r.tq[0], r.tq[1], r.tq[2], r.tq[3]);
         tumble = _quat.premultiply(_yawQ);
       }
-      const em = r.isPlayer && this.emote && mode === 'idle' ? this.emote : null;
+      const wanted = r.isPlayer ? this.emote : v.emote;
+      const em = wanted && mode === 'idle' ? wanted : null;
       v.a.update(dt, {
         mode: em ? 'emote' : mode, emote: em, speed: Math.hypot(r.vx - r.gvx, r.vz - r.gvz),
         vx: r.vx, vz: r.vz, vy: r.vy, fwdX: fx, fwdZ: fz, grounded: r.grounded, tumble,
@@ -398,12 +417,18 @@ export class RoundView {
       bi++;
     }
     if (this.blobs) { this.blobs.count = bi; this.blobs.instanceMatrix.needsUpdate = true; }
+    // Loose props hide the same way, so one can't park in front of the lens.
+    for (const o of this.level.obstacles) {
+      if (!o.hidesNearCamera || !o.mesh) continue;
+      const cp = this.cam.camera.position;
+      o.mesh.visible = (o.x - cp.x) ** 2 + (o.z - cp.z) ** 2 > 9;
+    }
     const p = this.sim.player;
     if (this.marker) {
       if (p && !p.hidden && !p.finished) {
         this.marker.visible = true;
         const v = this.viewOf(p);
-        this.marker.position.set(v.c.root.position.x, v.c.root.position.y + 2.2 + Math.sin(this.time * 4) * 0.05, v.c.root.position.z);
+        this.marker.position.set(v.c.root.position.x, v.c.root.position.y + 2.2 * this.bodyScale + this.headLift + Math.sin(this.time * 4) * 0.05, v.c.root.position.z);
         this.marker.quaternion.copy(this.cam.camera.quaternion);
       } else this.marker.visible = false;
     }

@@ -1,6 +1,7 @@
-// In-round overlay: logo, round info, qualified counter, timer, messages, onboarding tips and touch controls.
+// In-round overlay: logo, round info, spared counter, timer, messages, onboarding tips and touch controls.
 import { el, fmtClock } from './screens.js';
-import { ICON, crownIcon } from './icons.js';
+import { ICON, prizeIcon } from './icons.js';
+import { SAY, TERMS } from '../content/terms.js';
 
 export class HUD {
   constructor(app) {
@@ -13,18 +14,19 @@ export class HUD {
     this._timers = [];
   }
 
-  mount({ round, total, objective, mode, levelName, totalPlayers, solo }) {
+  mount({ round, total, objective, mode, levelName, totalPlayers, practice, curse }) {
     this.unmount();
     const n = el(`<div class="hud">
       <div class="hud-l">
         <img class="hud-logo" src="art/logo.webp" alt="Pumpkin Party" draggable="false">
-        <div class="hud-round"><div class="cr">${crownIcon()}</div><div>
-          <div class="a">${solo ? levelName : `Round <b>${round}</b> / ${total}`}</div>
+        <div class="hud-round"><div class="cr">${prizeIcon()}</div><div>
+          <div class="a">${practice ? `${TERMS.practice}: ${levelName}` : `Round <b>${round}</b> / ${total}`}</div>
           <div class="b" data-obj>${objective}</div>
         </div></div>
+        ${curse ? `<div class="hud-curse" data-curse>${TERMS.trick}: ${curse.name}</div>` : ''}
       </div>
       <div class="hud-r">
-        <div class="hud-q" data-qbox><div class="a" data-qlab>${mode === 'race' ? 'Qualified' : 'Still In'}</div><div class="b" data-q>0 / ${totalPlayers}</div></div>
+        <div class="hud-q" data-qbox><div class="a" data-qlab>${mode === 'race' ? TERMS.spared : 'Still In'}</div><div class="b" data-q>${mode === 'race' ? 0 : totalPlayers} / ${totalPlayers}</div></div>
         <div class="hud-t" data-tbox>${ICON.clock}<span data-t>00:00</span></div>
         <div class="hud-rank" data-rank></div>
       </div>
@@ -43,6 +45,35 @@ export class HUD {
     n.querySelector('[data-pause]').addEventListener('click', () => this.app.pauseRound());
     if (this.app.isTouch) this.addTouchControls();
     this._lastQ = -1; this._lastT = ''; this._lastRank = -1;
+  }
+
+  /** The lobby's overlay. Rivals are named as AI, because nobody here is a real player. */
+  mountLobby({ total, onReady }) {
+    this.unmount();
+    const app = this.app;
+    const emotes = app.emoteList();
+    const n = el(`<div class="hud lobby-hud">
+      <div class="lobby-top"><div class="t">Rivals arriving</div><div class="c" data-count>${SAY.rivalsArriving(0, total)}</div></div>
+      <div class="lobby-side">
+        <button class="btn gold md lobby-ready" data-ready>Ready!</button>
+        <div class="lobby-emotes">${emotes.map((e, i) => `<button class="btn violet sm" data-emote="${i}">${app.isTouch ? '' : `<kbd>${i + 1}</kbd>`}${e[0].toUpperCase()}${e.slice(1)}</button>`).join('')}</div>
+      </div>
+      <div class="lobby-help">Run around, bump the pumpkins and show off while everyone arrives</div>
+    </div>`);
+    document.getElementById('ui').appendChild(n);
+    this.node = n;
+    this.count = n.querySelector('[data-count]');
+    this.lobbyTotal = total;
+    this._lastCount = -1;
+    n.querySelector('[data-ready]').addEventListener('click', onReady);
+    n.querySelectorAll('[data-emote]').forEach((b) => b.addEventListener('click', () => app.input.onEmote?.(+b.dataset.emote)));
+    if (app.isTouch) this.addTouchControls();
+  }
+
+  setLobbyCount(n) {
+    if (n === this._lastCount || !this.count) return;
+    this._lastCount = n;
+    this.count.textContent = SAY.rivalsArriving(n, this.lobbyTotal);
   }
 
   unmount() {
@@ -110,7 +141,7 @@ export class HUD {
     btn(n.querySelector('[data-dive]'), () => input.pressDive());
   }
 
-  setQualified(n, label) {
+  setSpared(n, label) {
     if (n === this._lastQ) return;
     this._lastQ = n;
     this.q.textContent = `${n} / ${this.total}`;
@@ -156,10 +187,10 @@ export class HUD {
 
   clearMessage() { if (this.center) this.center.innerHTML = ''; }
 
-  introCard({ round, total, name, objective, hint, solo }) {
+  introCard({ round, total, name, objective, hint, practice }) {
     if (!this.center) return;
     this.center.innerHTML = `<div class="intro-card">
-      ${solo ? '' : `<div class="r">Round ${round} of ${total}</div>`}
+      ${practice ? '' : `<div class="r">Round ${round} of ${total}</div>`}
       <h1 class="stroke">${name}</h1><p>${objective}</p></div>
       <div class="skip-hint">${hint}</div>`;
   }

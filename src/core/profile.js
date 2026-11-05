@@ -3,6 +3,7 @@
 // falling back to localStorage on other hosts.
 import { defaultOwned, BUNDLES, SHOP } from '../assets/cosmetics.js';
 import { sdk } from './sdk.js';
+import { SAY } from '../content/terms.js';
 
 const KEY = 'pumpkinparty.save';
 const DAY = 86400000;
@@ -30,13 +31,13 @@ export const DAILY_REWARDS = [
 ];
 
 const MISSION_POOL = [
-  { id: 'qualify3', text: 'Qualify in 3 rounds', need: 3, stat: 'qualify', coins: 50, event: 12 },
-  { id: 'qualify6', text: 'Qualify in 6 rounds', need: 6, stat: 'qualify', coins: 90, event: 18 },
+  { id: 'qualify3', text: SAY.getSpared(3), need: 3, stat: 'qualify', coins: 50, event: 12 },
+  { id: 'qualify6', text: SAY.getSpared(6), need: 6, stat: 'qualify', coins: 90, event: 18 },
   { id: 'match2', text: 'Play 2 matches', need: 2, stat: 'match', coins: 40, event: 10 },
   { id: 'jump40', text: 'Jump 40 times', need: 40, stat: 'jump', coins: 40, event: 8 },
   { id: 'dive12', text: 'Dive 12 times', need: 12, stat: 'dive', coins: 40, event: 8 },
-  { id: 'final1', text: 'Reach a Final Showdown', need: 1, stat: 'final', coins: 80, event: 16 },
-  { id: 'crown1', text: 'Win a crown', need: 1, stat: 'crown', gems: 5, coins: 60, event: 25 },
+  { id: 'final1', text: SAY.reachFinal(), need: 1, stat: 'final', coins: 80, event: 16 },
+  { id: 'win1', text: SAY.winPrize(), need: 1, stat: 'win', gems: 5, coins: 60, event: 25 },
   { id: 'top3', text: 'Finish a race in the top 3', need: 1, stat: 'podium', coins: 70, event: 14 },
   { id: 'survive2', text: 'Survive 2 survival rounds', need: 2, stat: 'survive', coins: 60, event: 12 },
   { id: 'bounce6', text: 'Hit 6 bounce pads', need: 6, stat: 'bounce', coins: 40, event: 8 },
@@ -56,13 +57,13 @@ export function defaults() {
     coins: 150, gems: 5, xp: 0, level: 1,
     owned: defaultOwned(),
     equip: { skin: 'pumpkin', hat: 'none', glasses: 'none', trail: 'none', emote: 'wave' },
-    stars: {}, best: {},
-    stats: { matches: 0, rounds: 0, qualified: 0, crowns: 0, finals: 0, jumps: 0, dives: 0, hits: 0, falls: 0, streak: 0, bestStreak: 0, recent: [] },
+    seen: {},
+    stats: { matches: 0, rounds: 0, qualified: 0, wins: 0, finals: 0, jumps: 0, dives: 0, hits: 0, falls: 0, streak: 0, bestStreak: 0, recent: [] },
     missions: { day: 0, list: [] },
     daily: { lastDay: 0, streak: 0 },
     event: { season: -1, points: 0, claimed: [] },
     settings: { music: 0.7, sfx: 0.9, quality: 'auto', sens: 1, invertY: false, reducedShake: false, showHints: true },
-    flags: { tutorial: false, firstMatch: false, reviveUsed: false },
+    flags: { tutorial: false, firstMatch: false },
     freeCoinsDay: 0, freeCoinsCount: 0,
     guestName: null,
   };
@@ -283,18 +284,23 @@ export class Profile {
     return r;
   }
 
-  // ------------------------------------------------------------ level stars
-  starsFor(id) { return this.d.stars[id] || 0; }
-  totalStars() { return Object.values(this.d.stars).reduce((a, b) => a + b, 0); }
-  setStars(id, n) { if (n > this.starsFor(id)) { this.d.stars[id] = n; this.changed(); } }
+  // ------------------------------------------------------------ rounds met so far, for Practice
+  markSeen(id) { if (!this.d.seen[id]) { this.d.seen[id] = true; this.save(); } }
+  hasSeen(id) { return !!this.d.seen[id]; }
+
+  /** How much of the game this player has met, reported to the platform. */
+  completion(totalRounds) {
+    const met = Object.keys(this.d.seen).length / Math.max(1, totalRounds);
+    return Math.min(100, met * 70 + Math.min(this.d.stats.wins, 6) * 5);
+  }
 
   /** Rolling win record over the last matches, which feeds the difficulty director. */
-  recordMatch(reachedRound, crown) {
+  recordMatch(reachedRound, won) {
     const st = this.d.stats;
     st.matches++;
-    st.recent.push(crown ? 5 : reachedRound);
+    st.recent.push(won ? 5 : reachedRound);
     if (st.recent.length > 8) st.recent.shift();
-    if (crown) { st.crowns++; st.streak++; st.bestStreak = Math.max(st.bestStreak, st.streak); } else st.streak = 0;
+    if (won) { st.wins++; st.streak++; st.bestStreak = Math.max(st.bestStreak, st.streak); } else st.streak = 0;
     this.changed();
   }
 }
